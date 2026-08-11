@@ -1,3 +1,4 @@
+import type { RoomObstacle } from './buildRoom'
 import { FURNITURE_DEFS, type FurnitureItem, type FurnitureType } from './types'
 
 /** 旋转后的占地半尺寸（AABB 近似，仅用于房间边界约束） */
@@ -143,10 +144,17 @@ export interface Box2 {
 
 /**
  * 精细碰撞检测：逐实体块做 OBB 平面重叠 + 高度区间重叠。
- * 返回与之碰撞的家具 id；无碰撞返回 null。
+ * obstacles 为墙面凸出设施（弱电箱、空调、门套、踢脚线等，轴对齐）。
+ * 返回与之碰撞的家具 id（或 'wall:第n项设施'）；无碰撞返回 null。
  * margin 为实体块之间的最小间隙（米）。
  */
-export function findCollision(items: FurnitureItem[], cand: Box2, margin = 0.02): string | null {
+export function findCollision(
+  items: FurnitureItem[],
+  cand: Box2,
+  margin = 0.02,
+  obstacles: RoomObstacle[] = [],
+  obstacleMargin = 0.005,
+): string | null {
   const partsA = PROFILES[cand.type].map((p) => partToWorld(p, cand.x, cand.z, cand.rotation))
   for (const it of items) {
     if (it.id === cand.excludeId) continue
@@ -158,6 +166,14 @@ export function findCollision(items: FurnitureItem[], cand: Box2, margin = 0.02)
         if (pa.y1 <= wb.y0 + 0.005 || wb.y1 <= pa.y0 + 0.005) continue
         if (obbOverlap(pa, wb, margin)) return it.id
       }
+    }
+  }
+  // 墙面设施（轴对齐，rot = 0）；间隙要求小于家具之间，允许贴墙摆放
+  for (let i = 0; i < obstacles.length; i++) {
+    const o = obstacles[i]
+    for (const pa of partsA) {
+      if (pa.y1 <= o.y0 + 0.005 || o.y1 <= pa.y0 + 0.005) continue
+      if (obbOverlap(pa, { x: o.x, z: o.z, hx: o.hx, hz: o.hz, rot: 0 }, obstacleMargin)) return `wall:${i}`
     }
   }
   return null
@@ -172,10 +188,16 @@ export function resolveDrag(
   item: FurnitureItem,
   targetX: number,
   targetZ: number,
+  obstacles: RoomObstacle[] = [],
 ): { x: number; z: number } {
   const tryPos = (x: number, z: number): { x: number; z: number } | null => {
     const c = clampToRoom(room, item.type, item.rotation, x, z)
-    return findCollision(items, { type: item.type, rotation: item.rotation, x: c.x, z: c.z, excludeId: item.id })
+    return findCollision(
+      items,
+      { type: item.type, rotation: item.rotation, x: c.x, z: c.z, excludeId: item.id },
+      0.02,
+      obstacles,
+    )
       ? null
       : c
   }

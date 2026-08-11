@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RoomScene, type ViewCommand } from '@/components/RoomScene'
+import { buildRoomObstacles } from '@/three/buildRoom'
 import { clampToRoom, findCollision } from '@/three/collision'
 import { BUDGET, SHOPPING_LIST, buildOfficeLayout, shoppingTotal } from '@/three/presets'
 import { DEFAULT_ROOM, FURNITURE_DEFS, type FurnitureItem, type FurnitureType, type RoomParams } from '@/three/types'
@@ -89,6 +90,9 @@ export default function App() {
 
   const patchRoom = useCallback((patch: Partial<RoomParams>) => setRoom((r) => ({ ...r, ...patch })), [])
 
+  /** 墙面凸出设施碰撞体（弱电箱、空调、门套、踢脚线等） */
+  const obstacles = useMemo(() => buildRoomObstacles(room), [room])
+
   const onPlace = useCallback((type: FurnitureType, x: number, z: number) => {
     const id = `${type}-${Date.now().toString(36)}`
     setItems((list) => [...list, { id, type, x, z, rotation: 0 }])
@@ -110,11 +114,12 @@ export default function App() {
         if (!it) return list
         const rot = ((rotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
         const c = clampToRoom(room, it.type, rot, it.x, it.z)
-        if (findCollision(list, { type: it.type, rotation: rot, x: c.x, z: c.z, excludeId: id })) return list
+        if (findCollision(list, { type: it.type, rotation: rot, x: c.x, z: c.z, excludeId: id }, 0.02, obstacles))
+          return list
         return list.map((i) => (i.id === id ? { ...i, rotation: rot, x: c.x, z: c.z } : i))
       })
     },
-    [room],
+    [room, obstacles],
   )
 
   const rotateSelected = (deg: number) => {
@@ -138,7 +143,7 @@ export default function App() {
     setItems((list) => {
       for (const [dx, dz] of offsets) {
         const c = clampToRoom(room, selected.type, selected.rotation, selected.x + dx, selected.z + dz)
-        if (!findCollision(list, { type: selected.type, rotation: selected.rotation, x: c.x, z: c.z })) {
+        if (!findCollision(list, { type: selected.type, rotation: selected.rotation, x: c.x, z: c.z }, 0.02, obstacles)) {
           return [...list, { ...selected, id, x: c.x, z: c.z }]
         }
       }
@@ -320,6 +325,7 @@ export default function App() {
         <RoomScene
           room={room}
           items={items}
+          obstacles={obstacles}
           selectedId={selectedId}
           placingType={placingType}
           view={view}

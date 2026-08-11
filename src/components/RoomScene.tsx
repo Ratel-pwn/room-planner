@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { buildRoom } from '../three/buildRoom'
+import { buildRoom, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, resolveDrag } from '../three/collision'
 import { createFurnitureMesh } from '../three/furniture'
 import { type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
@@ -11,6 +11,7 @@ export type ViewCommand = { kind: 'persp' | 'top'; seq: number }
 interface Props {
   room: RoomParams
   items: FurnitureItem[]
+  obstacles: RoomObstacle[]
   selectedId: string | null
   placingType: FurnitureType | null
   view: ViewCommand
@@ -128,8 +129,8 @@ export function RoomScene(props: Props) {
         const pt = floorHit()
         if (pt) {
           const c = clamp(st.placingType, 0, pt.x, pt.z)
-          // 与其他家具碰撞时禁止放置
-          if (!findCollision(st.items, { type: st.placingType, rotation: 0, x: c.x, z: c.z })) {
+          // 与其他家具/墙面设施碰撞时禁止放置
+          if (!findCollision(st.items, { type: st.placingType, rotation: 0, x: c.x, z: c.z }, 0.02, st.obstacles)) {
             st.onPlace(st.placingType, c.x, c.z)
           }
         }
@@ -158,7 +159,12 @@ export function RoomScene(props: Props) {
           eng.ghost.position.set(c.x, 0, c.z)
           eng.ghost.visible = true
           // 碰撞时幽灵变红，提示此处不可放置
-          const blocked = !!findCollision(st.items, { type: st.placingType, rotation: 0, x: c.x, z: c.z })
+          const blocked = !!findCollision(
+            st.items,
+            { type: st.placingType, rotation: 0, x: c.x, z: c.z },
+            0.02,
+            st.obstacles,
+          )
           tintGhost(eng.ghost, blocked)
         }
       }
@@ -168,7 +174,7 @@ export function RoomScene(props: Props) {
           const item = st.items.find((i) => i.id === dragging!.id)
           if (item) {
             // 碰撞解算：能全移则全移，否则沿墙滑动，都撞则不动
-            const c = resolveDrag(st.items, st.room, item, pt.x + dragging.dx, pt.z + dragging.dz)
+            const c = resolveDrag(st.items, st.room, item, pt.x + dragging.dx, pt.z + dragging.dz, st.obstacles)
             st.onMove(dragging.id, c.x, c.z)
           }
         }

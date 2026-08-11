@@ -55,21 +55,21 @@ export function buildOfficeLayout(): FurnitureItem[] {
   let n = 0
   const id = (t: string) => `${t}-preset-${n++}`
 
-  // A 排：靠 -Z 墙，面向墙，4 个工位（靠门端留出入通道）
-  const rowA = [-1.2, 0, 1.2, 2.4]
+  // A 排：靠 -Z 墙，面向墙，4 个工位（靠门端留出入通道；桌间留 4cm 缝隙）
+  const rowA = [-1.18, 0.06, 1.3, 2.54]
   for (const x of rowA) {
     items.push({ id: id('desk'), type: 'desk120', x, z: -1.5, rotation: 0 })
     items.push({ id: id('chair'), type: 'chair', x, z: -0.82, rotation: Math.PI }) // 面向 -Z 墙
   }
   // B 排：靠 +Z 墙，面向墙，4 个工位（整体靠窗端错开，避开弱电箱 x≈2.1）
-  const rowB = [-2.85, -1.65, -0.45, 0.75]
+  const rowB = [-2.98, -1.74, -0.5, 0.74]
   for (const x of rowB) {
     items.push({ id: id('desk'), type: 'desk120', x, z: 1.5, rotation: 0 })
     items.push({ id: id('chair'), type: 'chair', x, z: 0.82, rotation: 0 }) // 面向 +Z 墙
   }
   // 窗端休闲区：沙发床贴 -Z 墙，前置茶几
-  items.push({ id: id('sofa'), type: 'sofa', x: -2.72, z: -1.49, rotation: 0 })
-  items.push({ id: id('tea'), type: 'teaTable', x: -2.72, z: -0.88, rotation: 0 })
+  items.push({ id: id('sofa'), type: 'sofa', x: -2.75, z: -1.46, rotation: 0 })
+  items.push({ id: id('tea'), type: 'teaTable', x: -2.75, z: -0.85, rotation: 0 })
 
   return items
 }
