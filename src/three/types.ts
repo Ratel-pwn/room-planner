@@ -62,3 +62,28 @@ export const DEFAULT_ROOM: RoomParams = {
   doorOffset: 0.9,
   showCeiling: false,
 }
+
+/** 房间角落的结构凸起（柱/管道井），w 沿 X 方向、d 沿 Z 方向，0 表示无凸起 */
+export interface CornerBump {
+  w: number
+  d: number
+}
+
+/** 四角顺序：左下(-X,-Z)、右下(+X,-Z)、右上(+X,+Z)、左上(-X,+Z) */
+export type BumpCorners = [CornerBump, CornerBump, CornerBump, CornerBump]
+
+export const NO_BUMPS: BumpCorners = [
+  { w: 0, d: 0 },
+  { w: 0, d: 0 },
+  { w: 0, d: 0 },
+  { w: 0, d: 0 },
+]
+
+/** 一个可独立配置的房间 */
+export interface RoomConfig {
+  id: string
+  name: string
+  params: RoomParams
+  bumps: BumpCorners
+  items: FurnitureItem[]
+}

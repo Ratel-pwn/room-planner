@@ -4,12 +4,14 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { buildRoom, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, resolveDrag, walkCollide } from '../three/collision'
 import { createFurnitureMesh } from '../three/furniture'
-import { type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
+import { type BumpCorners, type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
 
-export type ViewCommand = { kind: 'persp' | 'top' | 'walk'; seq: number }
+/** plan = 平面模式（拖动平移）；walk = 3D 漫游（默认） */
+export type ViewCommand = { kind: 'plan' | 'walk'; seq: number }
 
 interface Props {
   room: RoomParams
+  bumps: BumpCorners
   items: FurnitureItem[]
   obstacles: RoomObstacle[]
   selectedId: string | null
@@ -25,8 +27,7 @@ export function RoomScene(props: Props) {
   const stateRef = useRef(props)
   stateRef.current = props
 
-  // 漫游状态
-  const modeRef = useRef<'orbit' | 'walk'>('orbit')
+  const modeRef = useRef<'plan' | 'walk'>('plan')
   const walkRef = useRef({
     yaw: 0,
     pitch: 0,
@@ -51,18 +52,23 @@ export function RoomScene(props: Props) {
     scene.background = new THREE.Color(0xe9ebed)
 
     const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 200)
+    camera.position.set(0, 12, 0)
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     container.appendChild(renderer.domElement)
 
+    // 平面模式控制：左键平移、滚轮缩放、禁止旋转
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.dampingFactor = 0.08
-    controls.maxPolarAngle = Math.PI / 2 - 0.02
-    controls.minDistance = 1
-    controls.maxDistance = 40
+    controls.dampingFactor = 0.1
+    controls.enableRotate = false
+    controls.screenSpacePanning = true
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+    controls.minDistance = 2
+    controls.maxDistance = 50
+    controls.target.set(0, 0, 0)
 
     // 灯光
     scene.add(new THREE.HemisphereLight(0xffffff, 0xcfc9bd, 0.9))
@@ -128,11 +134,13 @@ export function RoomScene(props: Props) {
       return null
     }
 
+    // capture 阶段处理：命中家具/放置时阻止 OrbitControls 的平移
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return
       // 漫游模式：左键拖动 = 环视
       if (modeRef.current === 'walk') {
         walkRef.current.look = { x: e.clientX, y: e.clientY }
+        e.stopPropagation()
         return
       }
       setNdc(e)
@@ -148,6 +156,7 @@ export function RoomScene(props: Props) {
             st.onPlace(st.placingType, c.x, c.z)
           }
         }
+        e.stopPropagation()
         return
       }
 
@@ -160,6 +169,7 @@ export function RoomScene(props: Props) {
           dragging = { id, dx: item.x - pt.x, dz: item.z - pt.z }
           controls.enabled = false
         }
+        e.stopPropagation() // 拖家具时不平移平面图
       }
     }
 
@@ -217,7 +227,7 @@ export function RoomScene(props: Props) {
       const st = stateRef.current
       const wasDrag = dragging
       dragging = null
-      controls.enabled = true
+      controls.enabled = modeRef.current === 'plan'
       // 纯点击空白处 → 取消选择
       if (!wasDrag && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 4 && !st.placingType) {
         setNdc(e)
@@ -226,7 +236,7 @@ export function RoomScene(props: Props) {
       downAt = null
     }
 
-    renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true })
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
 
@@ -251,16 +261,6 @@ export function RoomScene(props: Props) {
     onResize()
     const ro = new ResizeObserver(onResize)
     ro.observe(container)
-
-    // 初始相机
-    const setPersp = () => {
-      const { length: L, width: W, height: H } = stateRef.current.room
-      camera.position.set(L * 0.62, H * 1.9, W * 2.1)
-      controls.target.set(0, 0.6, 0)
-      controls.update()
-    }
-    setPersp()
-    ;(eng as unknown as { setPersp: () => void }).setPersp = setPersp
 
     const clock = new THREE.Clock()
     let raf = 0
@@ -314,7 +314,7 @@ export function RoomScene(props: Props) {
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
-      renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown, { capture: true })
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('keydown', onKeyDown)
@@ -328,7 +328,7 @@ export function RoomScene(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── 房间参数变化 → 重建房间 ──
+  // ── 房间参数/凸起变化 → 重建房间 ──
   useEffect(() => {
     const eng = engineRef.current
     if (!eng) return
@@ -341,9 +341,9 @@ export function RoomScene(props: Props) {
         }
       })
     }
-    eng.roomGroup = buildRoom(props.room)
+    eng.roomGroup = buildRoom(props.room, props.bumps)
     eng.scene.add(eng.roomGroup)
-  }, [props.room])
+  }, [props.room, props.bumps])
 
   // ── 家具列表同步 ──
   useEffect(() => {
@@ -420,10 +420,10 @@ export function RoomScene(props: Props) {
   useEffect(() => {
     const eng = engineRef.current
     if (!eng || props.view.seq === 0) return
-    const { length: L, width: W, height: H, doorOffset, windowEnd } = props.room
+    const { length: L, width: W, doorOffset, windowEnd } = props.room
 
     if (props.view.kind === 'walk') {
-      // 进入漫游：站位居中偏门侧，视线 1.6m，面向窗户
+      // 进入漫游：出生点在门口，视线 1.6m，面向窗户
       modeRef.current = 'walk'
       eng.controls.enabled = false
       const doorX = windowEnd === 'negX' ? L / 2 : -L / 2
@@ -437,16 +437,13 @@ export function RoomScene(props: Props) {
       return
     }
 
-    modeRef.current = 'orbit'
+    // 平面模式：正俯视，拖动平移、滚轮缩放
+    modeRef.current = 'plan'
     eng.controls.enabled = true
     eng.camera.rotation.order = 'XYZ'
-    if (props.view.kind === 'top') {
-      eng.camera.position.set(0, Math.max(L, W) * 1.45, 0.0001)
-      eng.controls.target.set(0, 0, 0)
-    } else {
-      eng.camera.position.set(L * 0.62, H * 1.9, W * 2.1)
-      eng.controls.target.set(0, 0.6, 0)
-    }
+    const fitH = Math.max(L, W) * 1.15
+    eng.camera.position.set(0, fitH, 0)
+    eng.controls.target.set(0, 0, 0)
     eng.controls.update()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.view])

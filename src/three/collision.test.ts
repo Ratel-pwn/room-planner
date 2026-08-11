@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildRoomObstacles } from './buildRoom'
 import { findCollision, walkCollide } from './collision'
 import { buildOfficeLayout } from './presets'
-import { DEFAULT_ROOM, type FurnitureItem } from './types'
+import { DEFAULT_ROOM, type CornerBump, type FurnitureItem } from './types'
 
 const desk: FurnitureItem = { id: 'desk', type: 'desk120', x: 0, z: -1.5, rotation: 0 }
 
@@ -127,5 +127,36 @@ describe('第一人称漫游碰撞', () => {
 
   it('撞上弱电箱（凸出墙面）会被挡住', () => {
     expect(walkCollide(items, obs, 2.075, 1.72)).toBe(true)
+  })
+})
+
+describe('角落结构凸起', () => {
+  // 右上角(+X,+Z)设置 0.6×0.6 凸起
+  const bumps: [CornerBump, CornerBump, CornerBump, CornerBump] = [
+    { w: 0, d: 0 },
+    { w: 0, d: 0 },
+    { w: 0.6, d: 0.6 },
+    { w: 0, d: 0 },
+  ]
+  const obs = buildRoomObstacles(DEFAULT_ROOM, bumps)
+
+  it('凸起计入障碍物（11 + 1）', () => {
+    expect(obs.length).toBe(12)
+    expect(buildRoomObstacles(DEFAULT_ROOM).length).toBe(11)
+  })
+
+  it('书柜放进凸起角落会被挡住', () => {
+    // 凸起占据 x∈[3.375,3.675], z∈[1.2,1.8]
+    expect(findCollision([], { type: 'shelf', rotation: 0, x: 3.2, z: 1.55 }, 0.02, obs)).toMatch(/^wall:/)
+  })
+
+  it('没有凸起的角落不受影响', () => {
+    const noBump = buildRoomObstacles(DEFAULT_ROOM)
+    expect(findCollision([], { type: 'shelf', rotation: 0, x: 3.2, z: 1.55 }, 0.02, noBump)).toBeNull()
+  })
+
+  it('漫游撞上凸起会被挡住', () => {
+    expect(walkCollide([], obs, 3.45, 1.6)).toBe(true)
+    expect(walkCollide([], obs, 2.8, 1.0)).toBe(false)
   })
 })

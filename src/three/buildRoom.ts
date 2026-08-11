@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { RoomParams } from './types'
+import { NO_BUMPS, type BumpCorners, type RoomParams } from './types'
 
 const WALL_COLOR = 0xf5f4f0
 const FLOOR_COLOR = 0xe6e3dc
@@ -94,7 +94,15 @@ function makeTextSprite(text: string, scale = 1): THREE.Sprite {
   return sp
 }
 
-export function buildRoom(p: RoomParams): THREE.Group {
+/** 四角方位：左下(-X,-Z)、右下(+X,-Z)、右上(+X,+Z)、左上(-X,+Z) */
+const CORNER_SIGNS: Array<[number, number]> = [
+  [-1, -1],
+  [1, -1],
+  [1, 1],
+  [-1, 1],
+]
+
+export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.Group {
   const room = new THREE.Group()
   room.name = 'room'
   const L = p.length
@@ -219,6 +227,15 @@ export function buildRoom(p: RoomParams): THREE.Group {
     room.add(bb)
   }
 
+  // ── 四角结构凸起（柱/管道井）──
+  bumps.forEach((b, i) => {
+    if (b.w <= 0 || b.d <= 0) return
+    const [sx, sz] = CORNER_SIGNS[i]
+    const m = box(b.w, H, b.d, WALL_COLOR)
+    m.position.set(sx * (L / 2 - b.w / 2), H / 2, sz * (W / 2 - b.d / 2))
+    room.add(m)
+  })
+
   // ── 吊灯：两条 LED 长条灯，沿房间长向 ──
   for (const lz of [-0.8, 0.8]) {
     for (const lx of [-L / 4, L / 4]) {
@@ -285,7 +302,7 @@ export interface RoomObstacle {
   y1: number
 }
 
-export function buildRoomObstacles(p: RoomParams): RoomObstacle[] {
+export function buildRoomObstacles(p: RoomParams, bumps: BumpCorners = NO_BUMPS): RoomObstacle[] {
   const L = p.length
   const W = p.width
   const H = p.height
@@ -315,6 +332,13 @@ export function buildRoomObstacles(p: RoomParams): RoomObstacle[] {
   obs.push({ x: doorX, z: p.doorOffset, hx: 0.05, hz: (p.doorWidth + 0.08) / 2, y0: 0, y1: 2.12 })
   // 窗台板
   obs.push({ x: winX + sillOff, z: 0, hx: 0.08, hz: p.windowWidth / 2, y0: p.windowSill - 0.03, y1: p.windowSill })
+
+  // 四角结构凸起（从地面到天花板，实心）
+  bumps.forEach((b, i) => {
+    if (b.w <= 0 || b.d <= 0) return
+    const [sx, sz] = CORNER_SIGNS[i]
+    obs.push({ x: sx * (L / 2 - b.w / 2), z: sz * (W / 2 - b.d / 2), hx: b.w / 2, hz: b.d / 2, y0: 0, y1: H })
+  })
 
   return obs
 }
