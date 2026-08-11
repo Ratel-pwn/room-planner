@@ -26,6 +26,8 @@ export type FurnitureType =
   | 'chair'
   | 'bench'
   | 'shelf'
+  | 'sofa'
+  | 'teaTable'
 
 export interface FurnitureDef {
   type: FurnitureType
@@ -34,15 +36,18 @@ export interface FurnitureDef {
   w: number // X
   d: number // Z
   h: number
+  price?: number // 参考单价（元）
 }
 
 export const FURNITURE_DEFS: Record<FurnitureType, FurnitureDef> = {
-  desk120: { type: 'desk120', label: '书桌 1.2×0.6', w: 1.2, d: 0.6, h: 0.75 },
+  desk120: { type: 'desk120', label: '工位桌 1.2×0.6 · ¥67', w: 1.2, d: 0.6, h: 0.75, price: 67 },
   desk160: { type: 'desk160', label: '大桌 1.6×0.8', w: 1.6, d: 0.8, h: 0.75 },
   roundTable: { type: 'roundTable', label: '圆桌 ⌀0.9', w: 0.9, d: 0.9, h: 0.75 },
-  chair: { type: 'chair', label: '椅子', w: 0.45, d: 0.45, h: 0.82 },
+  chair: { type: 'chair', label: '弓形椅 · ¥41.5', w: 0.45, d: 0.45, h: 0.82, price: 41.5 },
   bench: { type: 'bench', label: '长凳 1.0×0.35', w: 1.0, d: 0.35, h: 0.45 },
   shelf: { type: 'shelf', label: '书柜 0.9×0.3', w: 0.9, d: 0.3, h: 1.8 },
+  sofa: { type: 'sofa', label: '沙发床 1.8×0.62 · ¥268', w: 1.8, d: 0.62, h: 0.8, price: 268 },
+  teaTable: { type: 'teaTable', label: '茶几 1.0×0.5 · ¥27', w: 1.0, d: 0.5, h: 0.45, price: 27 },
 }
 
 export const DEFAULT_ROOM: RoomParams = {

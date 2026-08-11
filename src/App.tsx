@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RoomScene, type ViewCommand } from '@/components/RoomScene'
+import { BUDGET, SHOPPING_LIST, buildOfficeLayout, shoppingTotal } from '@/three/presets'
 import { DEFAULT_ROOM, FURNITURE_DEFS, type FurnitureItem, type FurnitureType, type RoomParams } from '@/three/types'
 
 const LS_KEY = 'room-planner-v1'
@@ -145,6 +146,41 @@ export default function App() {
             >
               俯视平面
             </button>
+          </div>
+        </Section>
+
+        <Section title="8 人办公方案（技术团队）">
+          <button
+            className={`${btn} w-full border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800`}
+            onClick={() => {
+              setItems(buildOfficeLayout())
+              setSelectedId(null)
+              setPlacingType(null)
+            }}
+          >
+            一键摆入 8 人办公布局
+          </button>
+          <div className="mt-1 flex flex-col gap-1.5">
+            {SHOPPING_LIST.map((e) => (
+              <div key={e.key} className="flex items-baseline justify-between gap-2 text-xs text-neutral-600">
+                <span className="leading-4">
+                  {e.name} <span className="text-neutral-400">{e.spec} ×{e.qty}</span>
+                </span>
+                <span className="whitespace-nowrap font-medium text-neutral-800">
+                  ¥{(e.unitPrice * e.qty).toFixed(e.unitPrice % 1 ? 2 : 0)}
+                </span>
+              </div>
+            ))}
+            <div className="mt-1 flex items-baseline justify-between border-t border-neutral-200 pt-1.5 text-xs">
+              <span className="text-neutral-500">合计（预算 ¥{BUDGET}）</span>
+              <span className={`font-semibold ${shoppingTotal > BUDGET ? 'text-red-600' : 'text-emerald-600'}`}>
+                ¥{shoppingTotal.toFixed(2)}
+                {shoppingTotal > BUDGET && ` · 超 ¥${(shoppingTotal - BUDGET).toFixed(2)}`}
+              </span>
+            </div>
+            <p className="text-[11px] leading-4 text-neutral-400">
+              价格为 2026-08 淘宝/京东/苏宁公开在售参考价；若想卡进 ¥1000，沙发可换二手或延后采购。
+            </p>
           </div>
         </Section>
 

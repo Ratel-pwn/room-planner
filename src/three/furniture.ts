@@ -94,6 +94,53 @@ function shelf(): THREE.Group {
   return g
 }
 
+const SOFA_FABRIC = 0x8a9aad
+const SOFA_DARK = 0x6d7d8f
+
+/** 三人位沙发床 1.8×0.62×0.8（面向 +Z） */
+function sofa(): THREE.Group {
+  const g = new THREE.Group()
+  const W = 1.8, D = 0.62
+  // 座垫（三块）
+  for (const i of [-1, 0, 1]) {
+    const seat = bx(W / 3 - 0.03, 0.14, D - 0.16, SOFA_FABRIC, 0.95)
+    seat.position.set((i * W) / 3, 0.36, 0.03)
+    g.add(seat)
+  }
+  // 底座
+  const base = bx(W, 0.22, D - 0.06, SOFA_DARK, 0.9)
+  base.position.set(0, 0.18, 0)
+  g.add(base)
+  // 靠背
+  const back = bx(W, 0.44, 0.14, SOFA_FABRIC, 0.95)
+  back.position.set(0, 0.58, -D / 2 + 0.07)
+  g.add(back)
+  // 扶手
+  for (const sx of [-1, 1]) {
+    const arm = bx(0.1, 0.24, D - 0.08, SOFA_DARK, 0.9)
+    arm.position.set(sx * (W / 2 - 0.05), 0.49, 0)
+    g.add(arm)
+  }
+  // 短脚
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const foot = bx(0.04, 0.07, 0.04, LEG, 0.5)
+      foot.position.set(sx * (W / 2 - 0.08), 0.035, sz * (D / 2 - 0.08))
+      g.add(foot)
+    }
+  return g
+}
+
+/** 简易长方形茶几 1.0×0.5×0.45 */
+function teaTable(): THREE.Group {
+  const g = new THREE.Group()
+  const top = bx(1.0, 0.035, 0.5, 0xd8d2c8, 0.6)
+  top.position.y = 0.432
+  g.add(top)
+  g.add(legs(0.96, 0.46, 0.415, 0.035))
+  return g
+}
+
 export function createFurnitureMesh(type: FurnitureType): THREE.Group {
   let inner: THREE.Group
   switch (type) {
@@ -114,6 +161,12 @@ export function createFurnitureMesh(type: FurnitureType): THREE.Group {
       break
     case 'shelf':
       inner = shelf()
+      break
+    case 'sofa':
+      inner = sofa()
+      break
+    case 'teaTable':
+      inner = teaTable()
       break
   }
   const g = new THREE.Group()
