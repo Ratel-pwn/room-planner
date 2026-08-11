@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { buildRoom } from '../three/buildRoom'
+import { clampToRoom, findCollision, resolveDrag } from '../three/collision'
 import { createFurnitureMesh } from '../three/furniture'
-import { FURNITURE_DEFS, type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
+import { type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
 
 export type ViewCommand = { kind: 'persp' | 'top'; seq: number }
 
@@ -16,14 +17,6 @@ interface Props {
   onSelect: (id: string | null) => void
   onMove: (id: string, x: number, z: number) => void
   onPlace: (type: FurnitureType, x: number, z: number) => void
-}
-
-/** 旋转后的占地半尺寸 */
-function rotatedHalf(type: FurnitureType, rotation: number): { hw: number; hd: number } {
-  const def = FURNITURE_DEFS[type]
-  const c = Math.abs(Math.cos(rotation))
-  const s = Math.abs(Math.sin(rotation))
-  return { hw: (def.w * c + def.d * s) / 2, hd: (def.w * s + def.d * c) / 2 }
 }
 
 export function RoomScene(props: Props) {
@@ -105,13 +98,12 @@ export function RoomScene(props: Props) {
       return raycaster.ray.intersectPlane(floorPlane, pt) ? pt : null
     }
 
-    const clampToRoom = (type: FurnitureType, rotation: number, x: number, z: number) => {
-      const { length: L, width: W } = stateRef.current.room
-      const { hw, hd } = rotatedHalf(type, rotation)
-      return {
-        x: THREE.MathUtils.clamp(x, -L / 2 + hw, L / 2 - hw),
-        z: THREE.MathUtils.clamp(z, -W / 2 + hd, W / 2 - hd),
-      }
+    const clamp = (type: FurnitureType, rotation: number, x: number, z: number) =>
+      clampToRoom(stateRef.current.room, type, rotation, x, z)
+
+    const tintGhost = (g: THREE.Group, blocked: boolean) => {
+      const mats = (g.userData.mats ?? []) as Array<{ m: THREE.MeshStandardMaterial; c: number }>
+      for (const e of mats) e.m.color.setHex(blocked ? 0xe05555 : e.c)
     }
 
     const pickFurniture = (): string | null => {
@@ -135,8 +127,11 @@ export function RoomScene(props: Props) {
       if (st.placingType) {
         const pt = floorHit()
         if (pt) {
-          const c = clampToRoom(st.placingType, 0, pt.x, pt.z)
-          st.onPlace(st.placingType, c.x, c.z)
+          const c = clamp(st.placingType, 0, pt.x, pt.z)
+          // 与其他家具碰撞时禁止放置
+          if (!findCollision(st.items, { type: st.placingType, rotation: 0, x: c.x, z: c.z })) {
+            st.onPlace(st.placingType, c.x, c.z)
+          }
         }
         return
       }
@@ -159,9 +154,12 @@ export function RoomScene(props: Props) {
       if (st.placingType && eng.ghost) {
         const pt = floorHit()
         if (pt) {
-          const c = clampToRoom(st.placingType, 0, pt.x, pt.z)
+          const c = clamp(st.placingType, 0, pt.x, pt.z)
           eng.ghost.position.set(c.x, 0, c.z)
           eng.ghost.visible = true
+          // 碰撞时幽灵变红，提示此处不可放置
+          const blocked = !!findCollision(st.items, { type: st.placingType, rotation: 0, x: c.x, z: c.z })
+          tintGhost(eng.ghost, blocked)
         }
       }
       if (dragging) {
@@ -169,7 +167,8 @@ export function RoomScene(props: Props) {
         if (pt) {
           const item = st.items.find((i) => i.id === dragging!.id)
           if (item) {
-            const c = clampToRoom(item.type, item.rotation, pt.x + dragging.dx, pt.z + dragging.dz)
+            // 碰撞解算：能全移则全移，否则沿墙滑动，都撞则不动
+            const c = resolveDrag(st.items, st.room, item, pt.x + dragging.dx, pt.z + dragging.dz)
             st.onMove(dragging.id, c.x, c.z)
           }
         }
@@ -306,6 +305,7 @@ export function RoomScene(props: Props) {
     }
     if (props.placingType) {
       const g = createFurnitureMesh(props.placingType)
+      const mats: Array<{ m: THREE.MeshStandardMaterial; c: number }> = []
       g.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           o.material = (o.material as THREE.Material).clone()
@@ -313,8 +313,10 @@ export function RoomScene(props: Props) {
           m.transparent = true
           m.opacity = 0.45
           o.castShadow = false
+          mats.push({ m, c: m.color.getHex() })
         }
       })
+      g.userData.mats = mats
       g.visible = false
       eng.ghost = g
       eng.scene.add(g)

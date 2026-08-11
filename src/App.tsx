@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RoomScene, type ViewCommand } from '@/components/RoomScene'
+import { clampToRoom, findCollision } from '@/three/collision'
 import { BUDGET, SHOPPING_LIST, buildOfficeLayout, shoppingTotal } from '@/three/presets'
 import { DEFAULT_ROOM, FURNITURE_DEFS, type FurnitureItem, type FurnitureType, type RoomParams } from '@/three/types'
 
@@ -101,17 +102,48 @@ export default function App() {
 
   const selected = items.find((i) => i.id === selectedId) ?? null
 
+  /** 旋转（碰撞或越界时不生效） */
+  const applyRotation = useCallback(
+    (id: string, rotation: number) => {
+      setItems((list) => {
+        const it = list.find((i) => i.id === id)
+        if (!it) return list
+        const rot = ((rotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+        const c = clampToRoom(room, it.type, rot, it.x, it.z)
+        if (findCollision(list, { type: it.type, rotation: rot, x: c.x, z: c.z, excludeId: id })) return list
+        return list.map((i) => (i.id === id ? { ...i, rotation: rot, x: c.x, z: c.z } : i))
+      })
+    },
+    [room],
+  )
+
   const rotateSelected = (deg: number) => {
     if (!selected) return
-    setItems((list) =>
-      list.map((i) => (i.id === selected.id ? { ...i, rotation: (i.rotation + (deg * Math.PI) / 180) % (Math.PI * 2) } : i)),
-    )
+    applyRotation(selected.id, selected.rotation + (deg * Math.PI) / 180)
   }
 
   const dupSelected = () => {
     if (!selected) return
     const id = `${selected.type}-${Date.now().toString(36)}`
-    setItems((list) => [...list, { ...selected, id, x: selected.x + 0.3, z: selected.z + 0.3 }])
+    const offsets: Array<[number, number]> = [
+      [0.4, 0.4],
+      [-0.4, 0.4],
+      [0.4, -0.4],
+      [-0.4, -0.4],
+      [0.8, 0],
+      [0, 0.8],
+      [-0.8, 0],
+      [0, -0.8],
+    ]
+    setItems((list) => {
+      for (const [dx, dz] of offsets) {
+        const c = clampToRoom(room, selected.type, selected.rotation, selected.x + dx, selected.z + dz)
+        if (!findCollision(list, { type: selected.type, rotation: selected.rotation, x: c.x, z: c.z })) {
+          return [...list, { ...selected, id, x: c.x, z: c.z }]
+        }
+      }
+      return list // 周围全是家具时不复制
+    })
     setSelectedId(id)
   }
 
@@ -212,13 +244,7 @@ export default function App() {
                 step={1}
                 className="flex-1"
                 value={Math.round((selected.rotation * 180) / Math.PI) % 360}
-                onChange={(e) =>
-                  setItems((list) =>
-                    list.map((i) =>
-                      i.id === selected.id ? { ...i, rotation: (parseFloat(e.target.value) * Math.PI) / 180 } : i,
-                    ),
-                  )
-                }
+                onChange={(e) => applyRotation(selected.id, (parseFloat(e.target.value) * Math.PI) / 180)}
               />
               <span className="w-10 text-right text-xs text-neutral-500">
                 {Math.round((selected.rotation * 180) / Math.PI) % 360}°
