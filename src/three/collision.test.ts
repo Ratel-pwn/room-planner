@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRoomObstacles } from './buildRoom'
-import { findCollision } from './collision'
+import { findCollision, walkCollide } from './collision'
 import { buildOfficeLayout } from './presets'
 import { DEFAULT_ROOM, type FurnitureItem } from './types'
 
@@ -96,5 +96,36 @@ describe('预设布局', () => {
       )
       expect(hit, `${it.type} ${it.id} 不应碰撞 ${hit}`).toBeNull()
     }
+  })
+})
+
+describe('第一人称漫游碰撞', () => {
+  const obs = buildRoomObstacles(DEFAULT_ROOM)
+  const items = buildOfficeLayout()
+
+  it('漫游出生点（门口）可站立', () => {
+    expect(walkCollide(items, obs, 3.125, 0.9)).toBe(false)
+  })
+
+  it('中央通道可以通行', () => {
+    for (const x of [2, 1, 0, -0.9]) {
+      expect(walkCollide(items, obs, x, 0), `通道 x=${x} 应可通行`).toBe(false)
+    }
+  })
+
+  it('撞上工位桌会被挡住', () => {
+    expect(walkCollide(items, obs, 0.06, -1.5)).toBe(true)
+  })
+
+  it('撞上椅子会被挡住', () => {
+    expect(walkCollide(items, obs, 0.06, -0.82)).toBe(true)
+  })
+
+  it('撞上沙发会被挡住', () => {
+    expect(walkCollide(items, obs, -2.75, -1.46)).toBe(true)
+  })
+
+  it('撞上弱电箱（凸出墙面）会被挡住', () => {
+    expect(walkCollide(items, obs, 2.075, 1.72)).toBe(true)
   })
 })

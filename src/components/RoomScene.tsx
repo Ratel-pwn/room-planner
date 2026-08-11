@@ -2,11 +2,11 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { buildRoom, type RoomObstacle } from '../three/buildRoom'
-import { clampToRoom, findCollision, resolveDrag } from '../three/collision'
+import { clampToRoom, findCollision, resolveDrag, walkCollide } from '../three/collision'
 import { createFurnitureMesh } from '../three/furniture'
 import { type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
 
-export type ViewCommand = { kind: 'persp' | 'top'; seq: number }
+export type ViewCommand = { kind: 'persp' | 'top' | 'walk'; seq: number }
 
 interface Props {
   room: RoomParams
@@ -24,6 +24,15 @@ export function RoomScene(props: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(props)
   stateRef.current = props
+
+  // 漫游状态
+  const modeRef = useRef<'orbit' | 'walk'>('orbit')
+  const walkRef = useRef({
+    yaw: 0,
+    pitch: 0,
+    keys: new Set<string>(),
+    look: null as { x: number; y: number } | null,
+  })
 
   const engineRef = useRef<{
     scene: THREE.Scene
@@ -121,6 +130,11 @@ export function RoomScene(props: Props) {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return
+      // 漫游模式：左键拖动 = 环视
+      if (modeRef.current === 'walk') {
+        walkRef.current.look = { x: e.clientX, y: e.clientY }
+        return
+      }
       setNdc(e)
       downAt = { x: e.clientX, y: e.clientY }
       const st = stateRef.current
@@ -150,6 +164,20 @@ export function RoomScene(props: Props) {
     }
 
     const onPointerMove = (e: PointerEvent) => {
+      // 漫游模式：拖动环视
+      if (modeRef.current === 'walk') {
+        const look = walkRef.current.look
+        if (look) {
+          walkRef.current.yaw -= (e.clientX - look.x) * 0.004
+          walkRef.current.pitch = THREE.MathUtils.clamp(
+            walkRef.current.pitch - (e.clientY - look.y) * 0.004,
+            -1.2,
+            1.2,
+          )
+          walkRef.current.look = { x: e.clientX, y: e.clientY }
+        }
+        return
+      }
       setNdc(e)
       const st = stateRef.current
       if (st.placingType && eng.ghost) {
@@ -182,6 +210,10 @@ export function RoomScene(props: Props) {
     }
 
     const onPointerUp = (e: PointerEvent) => {
+      if (modeRef.current === 'walk') {
+        walkRef.current.look = null
+        return
+      }
       const st = stateRef.current
       const wasDrag = dragging
       dragging = null
@@ -197,6 +229,17 @@ export function RoomScene(props: Props) {
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
+
+    // 漫游键盘输入
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
+      walkRef.current.keys.add(e.key.toLowerCase())
+    }
+    const onKeyUp = (e: KeyboardEvent) => walkRef.current.keys.delete(e.key.toLowerCase())
+    const onBlur = () => walkRef.current.keys.clear()
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
 
     const onResize = () => {
       const w = container.clientWidth
@@ -219,10 +262,51 @@ export function RoomScene(props: Props) {
     setPersp()
     ;(eng as unknown as { setPersp: () => void }).setPersp = setPersp
 
+    const clock = new THREE.Clock()
     let raf = 0
     const tick = () => {
       raf = requestAnimationFrame(tick)
-      controls.update()
+      const dt = Math.min(clock.getDelta(), 0.05)
+      if (modeRef.current === 'walk') {
+        const st = stateRef.current
+        const k = walkRef.current.keys
+        const speed = k.has('shift') ? 4 : 2
+        const yaw = walkRef.current.yaw
+        const fx = -Math.sin(yaw)
+        const fz = -Math.cos(yaw)
+        const rx = Math.cos(yaw)
+        const rz = -Math.sin(yaw)
+        let mx = 0
+        let mz = 0
+        if (k.has('w') || k.has('arrowup')) { mx += fx; mz += fz }
+        if (k.has('s') || k.has('arrowdown')) { mx -= fx; mz -= fz }
+        if (k.has('a') || k.has('arrowleft')) { mx -= rx; mz -= rz }
+        if (k.has('d') || k.has('arrowright')) { mx += rx; mz += rz }
+        if (mx !== 0 || mz !== 0) {
+          const len = Math.hypot(mx, mz)
+          mx /= len
+          mz /= len
+          const r = 0.22
+          const px = camera.position.x
+          const pz = camera.position.z
+          const tryWalk = (nx: number, nz: number): { nx: number; nz: number } | null => {
+            const cx = THREE.MathUtils.clamp(nx, -st.room.length / 2 + r, st.room.length / 2 - r)
+            const cz = THREE.MathUtils.clamp(nz, -st.room.width / 2 + r, st.room.width / 2 - r)
+            return walkCollide(st.items, st.obstacles, cx, cz, r) ? null : { nx: cx, nz: cz }
+          }
+          const step =
+            tryWalk(px + mx * speed * dt, pz + mz * speed * dt) ??
+            tryWalk(px + mx * speed * dt, pz) ??
+            tryWalk(px, pz + mz * speed * dt)
+          if (step) {
+            camera.position.x = step.nx
+            camera.position.z = step.nz
+          }
+        }
+        camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+      } else {
+        controls.update()
+      }
       renderer.render(scene, camera)
     }
     tick()
@@ -233,6 +317,9 @@ export function RoomScene(props: Props) {
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
       controls.dispose()
       renderer.dispose()
       container.removeChild(renderer.domElement)
@@ -333,7 +420,26 @@ export function RoomScene(props: Props) {
   useEffect(() => {
     const eng = engineRef.current
     if (!eng || props.view.seq === 0) return
-    const { length: L, width: W, height: H } = props.room
+    const { length: L, width: W, height: H, doorOffset, windowEnd } = props.room
+
+    if (props.view.kind === 'walk') {
+      // 进入漫游：站位居中偏门侧，视线 1.6m，面向窗户
+      modeRef.current = 'walk'
+      eng.controls.enabled = false
+      const doorX = windowEnd === 'negX' ? L / 2 : -L / 2
+      const into = windowEnd === 'negX' ? -1 : 1
+      eng.camera.position.set(doorX + into * 0.55, 1.6, doorOffset)
+      eng.camera.rotation.order = 'YXZ'
+      walkRef.current.yaw = windowEnd === 'negX' ? Math.PI / 2 : -Math.PI / 2
+      walkRef.current.pitch = -0.04
+      walkRef.current.keys.clear()
+      eng.camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+      return
+    }
+
+    modeRef.current = 'orbit'
+    eng.controls.enabled = true
+    eng.camera.rotation.order = 'XYZ'
     if (props.view.kind === 'top') {
       eng.camera.position.set(0, Math.max(L, W) * 1.45, 0.0001)
       eng.controls.target.set(0, 0, 0)

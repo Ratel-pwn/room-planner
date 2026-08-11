@@ -203,3 +203,45 @@ export function resolveDrag(
   }
   return tryPos(targetX, targetZ) ?? tryPos(targetX, item.z) ?? tryPos(item.x, targetZ) ?? { x: item.x, z: item.z }
 }
+
+// ─────────────────────────────────────────────────────────────
+// 第一人称漫游：把人看作半径 r 的圆（身体高约 1.7m）
+// 与高度区间和人体相交的家具实体块 / 墙面设施做圆-OBB 检测
+// ─────────────────────────────────────────────────────────────
+
+const BODY_Y0 = 0.1 // 脚踝以下不挡（可跨过地面小物）
+const BODY_Y1 = 1.5 // 头顶余量（吊灯下可通过）
+
+function circleHitsObb(x: number, z: number, ob: Obb, r: number): boolean {
+  // 世界 → OBB 局部（partToWorld 的逆变换）
+  const dx = x - ob.x
+  const dz = z - ob.z
+  const c = Math.cos(ob.rot)
+  const s = Math.sin(ob.rot)
+  const lx = dx * c - dz * s
+  const lz = dx * s + dz * c
+  const qx = Math.max(-ob.hx, Math.min(ob.hx, lx))
+  const qz = Math.max(-ob.hz, Math.min(ob.hz, lz))
+  return Math.hypot(lx - qx, lz - qz) < r
+}
+
+/** 行走到 (x, z) 是否会撞上家具或墙面设施 */
+export function walkCollide(
+  items: FurnitureItem[],
+  obstacles: RoomObstacle[],
+  x: number,
+  z: number,
+  r = 0.22,
+): boolean {
+  for (const it of items) {
+    for (const p of PROFILES[it.type]) {
+      if (p.y1 <= BODY_Y0 || p.y0 >= BODY_Y1) continue
+      if (circleHitsObb(x, z, partToWorld(p, it.x, it.z, it.rotation), r)) return true
+    }
+  }
+  for (const o of obstacles) {
+    if (o.y1 <= BODY_Y0 || o.y0 >= BODY_Y1) continue
+    if (circleHitsObb(x, z, { x: o.x, z: o.z, hx: o.hx, hz: o.hz, rot: 0 }, r)) return true
+  }
+  return false
+}

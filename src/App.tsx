@@ -82,6 +82,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setPlacingType(null)
         setSelectedId(null)
+        setView((v) => (v.kind === 'walk' ? { kind: 'persp', seq: v.seq + 1 } : v))
       }
     }
     window.addEventListener('keydown', onKey)
@@ -182,6 +183,12 @@ export default function App() {
               onClick={() => setView((v) => ({ kind: 'top', seq: v.seq + 1 }))}
             >
               俯视平面
+            </button>
+            <button
+              className={`${btn} flex-1 ${view.kind === 'walk' ? btnActive : ''}`}
+              onClick={() => setView((v) => ({ kind: 'walk', seq: v.seq + 1 }))}
+            >
+              漫游
             </button>
           </div>
         </Section>
@@ -334,8 +341,20 @@ export default function App() {
           onPlace={onPlace}
         />
         <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/85 px-3 py-1.5 text-xs text-neutral-500 shadow-sm">
-          左键拖动旋转视角 · 滚轮缩放 · 右键拖动平移 · 网格间距 0.5 m
+          {view.kind === 'walk'
+            ? 'WASD / 方向键移动 · Shift 加速 · 按住左键拖动环视 · Esc 退出'
+            : '左键拖动旋转视角 · 滚轮缩放 · 右键拖动平移 · 网格间距 0.5 m'}
         </div>
+        {view.kind === 'walk' && (
+          <div className="absolute right-3 top-3">
+            <button
+              className={`${btn} bg-white/90 shadow-sm`}
+              onClick={() => setView((v) => ({ kind: 'persp', seq: v.seq + 1 }))}
+            >
+              退出漫游
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
