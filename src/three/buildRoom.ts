@@ -207,10 +207,15 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
   const doorWall = wallWithOpening(W, H, p.doorWidth, 0, 2.1, p.doorOffset, T, WALL_COLOR)
   doorWall.position.set(doorX + (p.windowEnd === 'negX' ? T / 2 : -T / 2), 0, 0)
   room.add(doorWall)
-  // 门扇（半开贴墙示意）
-  const doorLeaf = box(0.04, 2.08, p.doorWidth - 0.06, 0xc9a876, { roughness: 0.7 })
-  doorLeaf.position.set(doorX + (p.windowEnd === 'negX' ? 0.02 : -0.02), 1.04, p.doorOffset)
-  room.add(doorLeaf)
+  // 门扇（装在铰链枢轴上，沉浸模式的开门动画围绕门轴旋转）
+  const leafW = p.doorWidth - 0.06
+  const doorPivot = new THREE.Group()
+  doorPivot.name = 'doorPivot'
+  doorPivot.position.set(doorX + (p.windowEnd === 'negX' ? 0.02 : -0.02), 0, p.doorOffset - leafW / 2)
+  const doorLeaf = box(0.04, 2.08, leafW, 0xc9a876, { roughness: 0.7 })
+  doorLeaf.position.set(0, 1.04, leafW / 2)
+  doorPivot.add(doorLeaf)
+  room.add(doorPivot)
   // 门套
   const jamb = box(0.1, 2.12, p.doorWidth + 0.08, 0x8a8a8c)
   jamb.position.set(doorX, 1.06, p.doorOffset)

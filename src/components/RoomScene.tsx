@@ -6,8 +6,14 @@ import { clampToRoom, findCollision, resolveDrag, walkCollide } from '../three/c
 import { createFurnitureMesh } from '../three/furniture'
 import { type BumpCorners, type FurnitureItem, type FurnitureType, type RoomParams } from '../three/types'
 
-/** plan = 平面模式（拖动平移）；walk = 3D 漫游（默认） */
-export type ViewCommand = { kind: 'plan' | 'walk'; seq: number }
+/** plan = 平面模式（拖动平移）；walk = 自由漫游（无碰撞摄像机）；immersive = 沉浸体验（模拟人进屋） */
+export type ViewCommand = { kind: 'plan' | 'walk' | 'immersive'; seq: number }
+
+/** smoothstep 缓动 */
+function smooth(t: number, a: number, b: number): number {
+  const x = Math.max(0, Math.min(1, (t - a) / (b - a)))
+  return x * x * (3 - 2 * x)
+}
 
 interface Props {
   room: RoomParams
@@ -27,12 +33,25 @@ export function RoomScene(props: Props) {
   const stateRef = useRef(props)
   stateRef.current = props
 
-  const modeRef = useRef<'plan' | 'walk'>('plan')
+  const modeRef = useRef<'plan' | 'walk' | 'immersive'>('plan')
   const walkRef = useRef({
     yaw: 0,
     pitch: 0,
     keys: new Set<string>(),
     look: null as { x: number; y: number } | null,
+  })
+  // 沉浸模式状态机
+  const immersiveRef = useRef({
+    phase: 'entering' as 'entering' | 'free',
+    t: 0,
+    y: 0, // 离地高度（跳跃）
+    vy: 0,
+    grounded: true,
+    bob: 0, // 头部摆动相位
+    outX: 0, // 屋外起点 X
+    inX: 0, // 屋内终点 X
+    doorZ: 0,
+    openAngle: 0,
   })
 
   const engineRef = useRef<{
@@ -137,8 +156,8 @@ export function RoomScene(props: Props) {
     // capture 阶段处理：命中家具/放置时阻止 OrbitControls 的平移
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return
-      // 漫游模式：左键拖动 = 环视
-      if (modeRef.current === 'walk') {
+      // 漫游/沉浸模式：左键拖动 = 环视
+      if (modeRef.current === 'walk' || modeRef.current === 'immersive') {
         walkRef.current.look = { x: e.clientX, y: e.clientY }
         e.stopPropagation()
         return
@@ -174,8 +193,8 @@ export function RoomScene(props: Props) {
     }
 
     const onPointerMove = (e: PointerEvent) => {
-      // 漫游模式：拖动环视
-      if (modeRef.current === 'walk') {
+      // 漫游/沉浸模式：拖动环视
+      if (modeRef.current === 'walk' || modeRef.current === 'immersive') {
         const look = walkRef.current.look
         if (look) {
           walkRef.current.yaw -= (e.clientX - look.x) * 0.004
@@ -220,7 +239,7 @@ export function RoomScene(props: Props) {
     }
 
     const onPointerUp = (e: PointerEvent) => {
-      if (modeRef.current === 'walk') {
+      if (modeRef.current === 'walk' || modeRef.current === 'immersive') {
         walkRef.current.look = null
         return
       }
@@ -267,11 +286,14 @@ export function RoomScene(props: Props) {
     const tick = () => {
       raf = requestAnimationFrame(tick)
       const dt = Math.min(clock.getDelta(), 0.05)
-      if (modeRef.current === 'walk') {
-        const st = stateRef.current
+      const mode = modeRef.current
+
+      if (mode === 'walk') {
+        // ── 自由漫游：无碰撞摄像机，可穿墙穿物、升降 ──
         const k = walkRef.current.keys
         const speed = k.has('shift') ? 4 : 2
         const yaw = walkRef.current.yaw
+        const pitch = walkRef.current.pitch
         const fx = -Math.sin(yaw)
         const fz = -Math.cos(yaw)
         const rx = Math.cos(yaw)
@@ -284,26 +306,88 @@ export function RoomScene(props: Props) {
         if (k.has('d') || k.has('arrowright')) { mx += rx; mz += rz }
         if (mx !== 0 || mz !== 0) {
           const len = Math.hypot(mx, mz)
-          mx /= len
-          mz /= len
-          const r = 0.22
-          const px = camera.position.x
-          const pz = camera.position.z
-          const tryWalk = (nx: number, nz: number): { nx: number; nz: number } | null => {
-            const cx = THREE.MathUtils.clamp(nx, -st.room.length / 2 + r, st.room.length / 2 - r)
-            const cz = THREE.MathUtils.clamp(nz, -st.room.width / 2 + r, st.room.width / 2 - r)
-            return walkCollide(st.items, st.obstacles, cx, cz, r) ? null : { nx: cx, nz: cz }
-          }
-          const step =
-            tryWalk(px + mx * speed * dt, pz + mz * speed * dt) ??
-            tryWalk(px + mx * speed * dt, pz) ??
-            tryWalk(px, pz + mz * speed * dt)
-          if (step) {
-            camera.position.x = step.nx
-            camera.position.z = step.nz
-          }
+          camera.position.x += (mx / len) * speed * dt
+          camera.position.z += (mz / len) * speed * dt
         }
-        camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+        // Space 升 / C 降
+        const vy = (k.has(' ') ? 1 : 0) - (k.has('c') ? 1 : 0)
+        if (vy !== 0) camera.position.y = THREE.MathUtils.clamp(camera.position.y + vy * speed * dt, 0.15, 30)
+        camera.rotation.set(pitch, yaw, 0)
+      } else if (mode === 'immersive') {
+        // ── 沉浸体验：模拟人进屋 / 落地行走 ──
+        const st = stateRef.current
+        const im = immersiveRef.current
+
+        if (im.phase === 'entering') {
+          // 开门 → 走入 → 关门 的启动动画
+          im.t += dt
+          const pivot = eng.roomGroup?.getObjectByName('doorPivot')
+          if (pivot) {
+            const a = Math.max(0, Math.min(1, smooth(im.t, 0.5, 1.4) - smooth(im.t, 3.0, 3.8)))
+            pivot.rotation.y = im.openAngle * a
+          }
+          const k = smooth(im.t, 1.2, 3.0)
+          camera.position.set(im.outX + (im.inX - im.outX) * k, 1.6, im.doorZ)
+          camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+          if (im.t > 3.9) im.phase = 'free'
+        } else {
+          // 落地移动：走 / 跑 / 跳，有碰撞
+          const k = walkRef.current.keys
+          const speed = k.has('shift') ? 4 : 2
+          const yaw = walkRef.current.yaw
+          const fx = -Math.sin(yaw)
+          const fz = -Math.cos(yaw)
+          const rx = Math.cos(yaw)
+          const rz = -Math.sin(yaw)
+          let mx = 0
+          let mz = 0
+          if (k.has('w') || k.has('arrowup')) { mx += fx; mz += fz }
+          if (k.has('s') || k.has('arrowdown')) { mx -= fx; mz -= fz }
+          if (k.has('a') || k.has('arrowleft')) { mx -= rx; mz -= rz }
+          if (k.has('d') || k.has('arrowright')) { mx += rx; mz += rz }
+          const moving = mx !== 0 || mz !== 0
+          if (moving) {
+            const len = Math.hypot(mx, mz)
+            mx /= len
+            mz /= len
+            const r = 0.22
+            const px = camera.position.x
+            const pz = camera.position.z
+            const tryWalk = (nx: number, nz: number): { nx: number; nz: number } | null => {
+              const cx = THREE.MathUtils.clamp(nx, -st.room.length / 2 + r, st.room.length / 2 - r)
+              const cz = THREE.MathUtils.clamp(nz, -st.room.width / 2 + r, st.room.width / 2 - r)
+              return walkCollide(st.items, st.obstacles, cx, cz, r) ? null : { nx: cx, nz: cz }
+            }
+            const step =
+              tryWalk(px + mx * speed * dt, pz + mz * speed * dt) ??
+              tryWalk(px + mx * speed * dt, pz) ??
+              tryWalk(px, pz + mz * speed * dt)
+            if (step) {
+              camera.position.x = step.nx
+              camera.position.z = step.nz
+            }
+          }
+          // 跳跃与重力
+          if (im.grounded && k.has(' ')) {
+            im.vy = 4.4
+            im.grounded = false
+          }
+          im.vy -= 12 * dt
+          im.y += im.vy * dt
+          if (im.y <= 0) {
+            im.y = 0
+            im.vy = 0
+            im.grounded = true
+          }
+          // 走路头部轻微起伏
+          let bobY = 0
+          if (moving && im.grounded) {
+            im.bob += dt * speed * 2.4
+            bobY = Math.abs(Math.sin(im.bob)) * (speed > 3 ? 0.045 : 0.03)
+          }
+          camera.position.y = 1.6 + im.y + bobY
+          camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+        }
       } else {
         controls.update()
       }
@@ -422,18 +506,47 @@ export function RoomScene(props: Props) {
     if (!eng || props.view.seq === 0) return
     const { length: L, width: W, doorOffset, windowEnd } = props.room
 
+    // 离开沉浸模式时把门关上
+    const pivot = eng.roomGroup?.getObjectByName('doorPivot')
+    if (pivot && props.view.kind !== 'immersive') pivot.rotation.y = 0
+
+    const doorX = windowEnd === 'negX' ? L / 2 : -L / 2
+    const out = windowEnd === 'negX' ? 1 : -1
+
     if (props.view.kind === 'walk') {
-      // 进入漫游：出生点在门口，视线 1.6m，面向窗户
+      // 自由漫游：无碰撞摄像机，出生在门口
       modeRef.current = 'walk'
       eng.controls.enabled = false
-      const doorX = windowEnd === 'negX' ? L / 2 : -L / 2
-      const into = windowEnd === 'negX' ? -1 : 1
-      eng.camera.position.set(doorX + into * 0.55, 1.6, doorOffset)
+      eng.camera.position.set(doorX - out * 0.55, 1.6, doorOffset)
       eng.camera.rotation.order = 'YXZ'
       walkRef.current.yaw = windowEnd === 'negX' ? Math.PI / 2 : -Math.PI / 2
       walkRef.current.pitch = -0.04
       walkRef.current.keys.clear()
       eng.camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+      return
+    }
+
+    if (props.view.kind === 'immersive') {
+      // 沉浸体验：从门外开始，播开门进屋动画
+      modeRef.current = 'immersive'
+      eng.controls.enabled = false
+      const im = immersiveRef.current
+      im.phase = 'entering'
+      im.t = 0
+      im.y = 0
+      im.vy = 0
+      im.grounded = true
+      im.bob = 0
+      im.outX = doorX + out * 1.7
+      im.inX = doorX - out * 1.1
+      im.doorZ = doorOffset
+      im.openAngle = windowEnd === 'negX' ? -1.6 : 1.6
+      eng.camera.position.set(im.outX, 1.6, doorOffset)
+      eng.camera.rotation.order = 'YXZ'
+      walkRef.current.yaw = windowEnd === 'negX' ? Math.PI / 2 : -Math.PI / 2
+      walkRef.current.pitch = 0
+      walkRef.current.keys.clear()
+      eng.camera.rotation.set(0, walkRef.current.yaw, 0)
       return
     }
 

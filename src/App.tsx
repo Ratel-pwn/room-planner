@@ -122,7 +122,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setPlacingType(null)
         setSelectedId(null)
-        setView((v) => (v.kind === 'walk' ? { kind: 'plan', seq: v.seq + 1 } : v))
+        setView((v) => (v.kind === 'walk' || v.kind === 'immersive' ? { kind: 'plan', seq: v.seq + 1 } : v))
       }
     }
     window.addEventListener('keydown', onKey)
@@ -316,9 +316,18 @@ export default function App() {
               className={`${btn} flex-1 ${view.kind === 'walk' ? btnActive : ''}`}
               onClick={() => setView((v) => ({ kind: 'walk', seq: v.seq + 1 }))}
             >
-              3D 漫游
+              自由漫游
+            </button>
+            <button
+              className={`${btn} flex-1 ${view.kind === 'immersive' ? btnActive : ''}`}
+              onClick={() => setView((v) => ({ kind: 'immersive', seq: v.seq + 1 }))}
+            >
+              沉浸体验
             </button>
           </div>
+          <p className="text-[11px] leading-4 text-neutral-400">
+            自由漫游：无碰撞摄像机，可穿墙升降。沉浸体验：模拟人开门进屋，落地走/跑/跳，有真实碰撞。
+          </p>
         </Section>
 
         <Section title="8 人办公方案（技术团队）">
@@ -484,11 +493,13 @@ export default function App() {
           onPlace={onPlace}
         />
         <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/85 px-3 py-1.5 text-xs text-neutral-500 shadow-sm">
-          {view.kind === 'walk'
-            ? 'WASD / 方向键移动 · Shift 加速 · 按住左键拖动环视 · Esc 返回平面'
-            : '左键拖动平移画布 · 滚轮缩放 · 点家具可拖动布置 · 网格间距 0.5 m'}
+          {view.kind === 'walk' &&
+            'WASD / 方向键移动 · Space 升 / C 降 · Shift 加速 · 拖动环视 · 无碰撞 · Esc 返回平面'}
+          {view.kind === 'immersive' &&
+            'WASD 移动 · Shift 跑 · Space 跳 · 拖动环视 · Esc 返回平面'}
+          {view.kind === 'plan' && '左键拖动平移画布 · 滚轮缩放 · 点家具可拖动布置 · 网格间距 0.5 m'}
         </div>
-        {view.kind === 'walk' && (
+        {(view.kind === 'walk' || view.kind === 'immersive') && (
           <div className="absolute right-3 top-3">
             <button
               className={`${btn} bg-white/90 shadow-sm`}
