@@ -32,6 +32,8 @@ export type FurnitureType =
 export interface FurnitureDef {
   type: FurnitureType
   label: string
+  /** 家具栏卡片上的短名称 */
+  short: string
   // 包围尺寸（米），用于碰撞与地板投影
   w: number // X
   d: number // Z
@@ -40,14 +42,14 @@ export interface FurnitureDef {
 }
 
 export const FURNITURE_DEFS: Record<FurnitureType, FurnitureDef> = {
-  desk120: { type: 'desk120', label: '工位桌 1.2×0.6 · ¥67', w: 1.2, d: 0.6, h: 0.75, price: 67 },
-  desk160: { type: 'desk160', label: '大桌 1.6×0.8', w: 1.6, d: 0.8, h: 0.75 },
-  roundTable: { type: 'roundTable', label: '圆桌 ⌀0.9', w: 0.9, d: 0.9, h: 0.75 },
-  chair: { type: 'chair', label: '弓形椅 · ¥41.5', w: 0.45, d: 0.45, h: 0.82, price: 41.5 },
-  bench: { type: 'bench', label: '长凳 1.0×0.35', w: 1.0, d: 0.35, h: 0.45 },
-  shelf: { type: 'shelf', label: '书柜 0.9×0.3', w: 0.9, d: 0.3, h: 1.8 },
-  sofa: { type: 'sofa', label: '沙发床 1.8×0.62 · ¥268', w: 1.8, d: 0.62, h: 0.8, price: 268 },
-  teaTable: { type: 'teaTable', label: '茶几 1.0×0.5 · ¥27', w: 1.0, d: 0.5, h: 0.45, price: 27 },
+  desk120: { type: 'desk120', label: '工位桌 1.2×0.6 · ¥67', short: '工位桌', w: 1.2, d: 0.6, h: 0.75, price: 67 },
+  desk160: { type: 'desk160', label: '大桌 1.6×0.8', short: '大桌', w: 1.6, d: 0.8, h: 0.75 },
+  roundTable: { type: 'roundTable', label: '圆桌 ⌀0.9', short: '圆桌', w: 0.9, d: 0.9, h: 0.75 },
+  chair: { type: 'chair', label: '弓形椅 · ¥41.5', short: '弓形椅', w: 0.45, d: 0.45, h: 0.82, price: 41.5 },
+  bench: { type: 'bench', label: '长凳 1.0×0.35', short: '长凳', w: 1.0, d: 0.35, h: 0.45 },
+  shelf: { type: 'shelf', label: '书柜 0.9×0.3', short: '书柜', w: 0.9, d: 0.3, h: 1.8 },
+  sofa: { type: 'sofa', label: '沙发床 1.8×0.62 · ¥268', short: '沙发床', w: 1.8, d: 0.62, h: 0.8, price: 268 },
+  teaTable: { type: 'teaTable', label: '茶几 1.0×0.5 · ¥27', short: '茶几', w: 1.0, d: 0.5, h: 0.45, price: 27 },
 }
 
 export const DEFAULT_ROOM: RoomParams = {
@@ -79,11 +81,21 @@ export const NO_BUMPS: BumpCorners = [
   { w: 0, d: 0 },
 ]
 
-/** 一个可独立配置的房间 */
+/** 一个可独立配置的房间（隶属于某个空间，x/z 是房间中心在空间内的位置，米；rotation 绕 Y 轴弧度） */
 export interface RoomConfig {
   id: string
   name: string
+  x: number
+  z: number
+  rotation: number
   params: RoomParams
   bumps: BumpCorners
   items: FurnitureItem[]
+}
+
+/** 一个空间（一套房子/一层楼），包含多个房间 */
+export interface SpaceConfig {
+  id: string
+  name: string
+  rooms: RoomConfig[]
 }

@@ -24,6 +24,28 @@ export function clampToRoom(
   }
 }
 
+/** 两个矩形（中心 + 尺寸）在水平面上是否重叠，gap 为最小间距 */
+export function rectsOverlap(
+  ax: number,
+  az: number,
+  aw: number,
+  ad: number,
+  bx: number,
+  bz: number,
+  bw: number,
+  bd: number,
+  gap = 0,
+): boolean {
+  return Math.abs(ax - bx) < (aw + bw) / 2 + gap && Math.abs(az - bz) < (ad + bd) / 2 + gap
+}
+
+/** 矩形绕中心旋转后的轴对齐包围半尺寸（用于房间旋转后的重叠估算） */
+export function rotatedRectHalf(length: number, width: number, rotation: number): { hw: number; hd: number } {
+  const c = Math.abs(Math.cos(rotation))
+  const s = Math.abs(Math.sin(rotation))
+  return { hw: (length * c + width * s) / 2, hd: (length * s + width * c) / 2 }
+}
+
 // ─────────────────────────────────────────────────────────────
 // 精细化碰撞：每件家具拆成若干实体块（局部坐标，y 为离地高度区间）
 // 只有实体块在三维上真正相交才算碰撞 —— 椅子座面可以塞进桌面下，
