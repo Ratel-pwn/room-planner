@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, Coins, DoorOpen, Eye, Gamepad2, LayoutGrid, Map, Plus, Settings } from 'lucide-react'
+import { Building2, ChevronDown, Coins, Eye, Gamepad2, LayoutGrid, Map, Plus, Settings } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { ViewCommand } from '@/components/RoomScene'
 import { cn } from '@/lib/utils'
-import type { RoomConfig, SpaceConfig } from '@/three/types'
+import type { SpaceConfig } from '@/three/types'
 
 const VIEW_MODES: Array<{ kind: ViewCommand['kind']; label: string; icon: typeof Map; hint: string }> = [
   { kind: 'layout', label: '布局', icon: LayoutGrid, hint: '空间布局：拖动摆放房间位置，双击进入房间' },
@@ -20,7 +20,6 @@ const VIEW_MODES: Array<{ kind: ViewCommand['kind']; label: string; icon: typeof
 interface Props {
   space: SpaceConfig
   spaces: SpaceConfig[]
-  room: RoomConfig
   viewKind: ViewCommand['kind']
   placedTotal: number
   onSwitchSpace: (id: string) => void
@@ -29,11 +28,11 @@ interface Props {
   onOpenSettings: () => void
 }
 
-/** 顶部 HUD：空间切换 · 当前房间名 · 视角切换 · 经费 · 设置入口 */
+/** 顶部 HUD：空间切换 · 视角切换 · 经费 · 设置入口 */
 export function TopBar(p: Props) {
   return (
     <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-3">
-      {/* 左：空间切换 + 当前房间名（房间的增删改在布局模式里做） */}
+      {/* 左：空间切换 */}
       <div className="pointer-events-auto flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -67,12 +66,6 @@ export function TopBar(p: Props) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        {/* 静态展示当前房间名（不可点） */}
-        <div className="hud-panel flex items-center gap-1.5 py-2 pl-3 pr-3" title="当前编辑的房间（在布局模式中切换）">
-          <DoorOpen size={15} className="text-[#e0a92e]" />
-          <span className="max-w-[120px] truncate text-sm font-bold">{p.room.name}</span>
-        </div>
       </div>
 
       {/* 中：视角切换 */}

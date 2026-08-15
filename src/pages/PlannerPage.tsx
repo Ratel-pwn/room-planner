@@ -82,7 +82,6 @@ export default function PlannerPage() {
       <TopBar
         space={planner.space}
         spaces={planner.spaces}
-        room={planner.room}
         viewKind={view.kind}
         placedTotal={planner.placedTotal}
         onSwitchSpace={planner.switchSpace}
