@@ -5,6 +5,7 @@ import { buildRoom, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
 import { createFurnitureMesh } from '../three/furniture'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
+import { getWalkOverviewPose } from '../three/walkCamera'
 
 /** plan = 平面模式；walk = 自由漫游；immersive = 沉浸体验；layout = 空间布局（拖拽房间位置） */
 export type ViewCommand = { kind: 'plan' | 'walk' | 'immersive' | 'layout'; seq: number }
@@ -843,16 +844,16 @@ export function RoomScene(props: Props) {
     }
 
     if (props.view.kind === 'walk') {
-      // 自由漫游：无碰撞摄像机，出生在当前房间门口
+      // 自由漫游：无碰撞摄像机，以斜向俯视机位展示当前房间
       modeRef.current = 'walk'
       eng.controls.enabled = false
-      const sp = toWorld(doorLx - out * 0.55, doorOffset, ar)
-      eng.camera.position.set(sp.x, 1.6, sp.z)
+      const pose = getWalkOverviewPose(ar)
+      eng.camera.position.set(pose.x, pose.y, pose.z)
       eng.camera.rotation.order = 'YXZ'
-      walkRef.current.yaw = baseYaw
-      walkRef.current.pitch = -0.04
+      walkRef.current.yaw = pose.yaw
+      walkRef.current.pitch = pose.pitch
       walkRef.current.keys.clear()
-      eng.camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+      eng.camera.rotation.set(pose.pitch, pose.yaw, 0)
       return
     }
 
