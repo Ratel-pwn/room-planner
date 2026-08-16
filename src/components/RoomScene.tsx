@@ -8,6 +8,7 @@ import { DoorInteraction } from '../three/doorInteraction'
 import { createFurnitureMesh } from '../three/furniture'
 import { InteractionSystem, isInteractionKeyPress } from '../three/interaction'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
+import { shouldShowRoomLabel } from '../three/viewVisibility'
 import { getWalkOverviewPose, updateLookPitch } from '../three/walkCamera'
 
 /** plan = 平面模式；walk = 自由漫游；immersive = 沉浸体验；layout = 空间布局（拖拽房间位置） */
@@ -700,6 +701,7 @@ export function RoomScene(props: Props) {
       g.rotation.y = r.rotation
       const label = makeRoomLabel(r.name)
       label.position.set(0, r.params.height + 0.35, 0)
+      label.visible = shouldShowRoomLabel(props.view.kind)
       g.add(label)
       eng.scene.add(g)
       eng.roomGroups.set(r.id, g)
@@ -837,6 +839,13 @@ export function RoomScene(props: Props) {
     const { length: L, width: W, doorOffset, windowEnd } = ar.params
     const ox = ar.x
     const oz = ar.z
+
+    const showRoomLabels = shouldShowRoomLabel(props.view.kind)
+    for (const group of eng.roomGroups.values()) {
+      group.traverse((object) => {
+        if (object.userData.isLabel) object.visible = showRoomLabels
+      })
+    }
 
     // 离开沉浸模式时把门关上
     const pivot = eng.roomGroups.get(ar.id)?.getObjectByName('doorPivot')
