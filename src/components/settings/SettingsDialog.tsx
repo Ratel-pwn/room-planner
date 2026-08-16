@@ -8,7 +8,7 @@ const HELP_ITEMS: Array<{ title: string; keys: string }> = [
   { title: '布局模式', keys: '拖动房间摆放位置 · 房间上方悬浮条可设置 / 旋转 / 删除 · 右下角 + 新增房间 · 双击进入房间' },
   { title: '平面模式', keys: '左键拖动平移 · 滚轮缩放 · 点家具可拖动 · 数字键 1-8 选家具' },
   { title: '自由漫游', keys: 'WASD 沿视野方向移动（朝哪看往哪飞）· Space 抬升 / C 下降 · Shift 加速 · 拖动环视 · 点击选中家具 · Esc 返回平面' },
-  { title: '沉浸体验', keys: 'WASD 移动 · Shift 跑 · Space 跳 · 拖动环视 · 点击选中家具 · Esc 返回平面' },
+  { title: '沉浸体验', keys: 'WASD 移动 · Shift 跑 · Space 跳 · 靠近并看向门按 F 开关门 · 拖动环视 · 点击选中家具 · Esc 返回平面' },
   { title: '放置家具', keys: '底部建造栏选家具（或按 1-8）· 点击地面摆放 · Esc 取消' },
 ]
 

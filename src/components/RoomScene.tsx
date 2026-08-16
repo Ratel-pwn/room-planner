@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { InteractionPrompt } from './hud/InteractionPrompt'
 import { buildRoom, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
+import { DoorInteraction } from '../three/doorInteraction'
 import { createFurnitureMesh } from '../three/furniture'
+import { InteractionSystem, isInteractionKeyPress } from '../three/interaction'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
-import { getWalkOverviewPose } from '../three/walkCamera'
+import { getWalkOverviewPose, updateLookPitch } from '../three/walkCamera'
 
 /** plan = 平面模式；walk = 自由漫游；immersive = 沉浸体验；layout = 空间布局（拖拽房间位置） */
 export type ViewCommand = { kind: 'plan' | 'walk' | 'immersive' | 'layout'; seq: number }
@@ -116,6 +119,14 @@ export function RoomScene(props: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(props)
   stateRef.current = props
+  const [interactionPrompt, setInteractionPrompt] = useState<string | null>(null)
+  const interactionPromptRef = useRef<string | null>(null)
+  const interactionSystemRef = useRef(new InteractionSystem())
+  const publishInteractionPrompt = useCallback((prompt: string | null) => {
+    if (interactionPromptRef.current === prompt) return
+    interactionPromptRef.current = prompt
+    setInteractionPrompt(prompt)
+  }, [])
 
   const modeRef = useRef<'plan' | 'walk' | 'immersive' | 'layout'>('plan')
   const walkRef = useRef({
@@ -202,6 +213,7 @@ export function RoomScene(props: Props) {
       highlight: null as THREE.BoxHelper | null,
     }
     engineRef.current = eng
+    const interactions = interactionSystemRef.current
 
     /** 当前编辑的房间 */
     const getActiveRoom = (): RoomConfig => {
@@ -328,11 +340,7 @@ export function RoomScene(props: Props) {
         const look = walkRef.current.look
         if (look) {
           walkRef.current.yaw -= (e.clientX - look.x) * 0.004
-          walkRef.current.pitch = THREE.MathUtils.clamp(
-            walkRef.current.pitch - (e.clientY - look.y) * 0.004,
-            -1.2,
-            1.2,
-          )
+          walkRef.current.pitch = updateLookPitch(walkRef.current.pitch, e.clientY - look.y)
           walkRef.current.look = { x: e.clientX, y: e.clientY }
         }
         return
@@ -435,6 +443,14 @@ export function RoomScene(props: Props) {
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
       // 阻止 Space 触发聚焦按钮 / 页面滚动
       if (e.key === ' ') e.preventDefault()
+      if (
+        isInteractionKeyPress(e.key, e.repeat) &&
+        modeRef.current === 'immersive' &&
+        immersiveRef.current.phase === 'free' &&
+        interactions.interactFocused()
+      ) {
+        e.preventDefault()
+      }
       walkRef.current.keys.add(e.key.toLowerCase())
     }
     const onKeyUp = (e: KeyboardEvent) => walkRef.current.keys.delete(e.key.toLowerCase())
@@ -462,6 +478,7 @@ export function RoomScene(props: Props) {
       const mode = modeRef.current
 
       if (mode === 'walk') {
+        publishInteractionPrompt(null)
         // ── 自由漫游：无碰撞摄像机，沿视野方向飞行（朝哪看就往哪移动）──
         const k = walkRef.current.keys
         const speed = k.has('shift') ? 4 : 2
@@ -493,6 +510,7 @@ export function RoomScene(props: Props) {
         const im = immersiveRef.current
 
         if (im.phase === 'entering') {
+          publishInteractionPrompt(null)
           // 开门 → 走入 → 关门 的启动动画
           im.t += dt
           const pivot = eng.roomGroups.get(ar.id)?.getObjectByName('doorPivot')
@@ -569,8 +587,12 @@ export function RoomScene(props: Props) {
           }
           camera.position.y = 1.6 + im.y + bobY
           camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
+          camera.getWorldDirection(fwdV)
+          const focus = interactions.update(camera.position, fwdV, dt)
+          publishInteractionPrompt(focus?.prompt ?? null)
         }
       } else {
+        publishInteractionPrompt(null)
         // plan / layout：OrbitControls 平移缩放
         controls.update()
       }
@@ -636,6 +658,7 @@ export function RoomScene(props: Props) {
       controls.dispose()
       renderer.dispose()
       container.removeChild(renderer.domElement)
+      interactions.clear()
       engineRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -646,6 +669,9 @@ export function RoomScene(props: Props) {
   useEffect(() => {
     const eng = engineRef.current
     if (!eng) return
+    const interactions = interactionSystemRef.current
+    interactions.clear()
+    publishInteractionPrompt(null)
     const ids = new Set(props.rooms.map((r) => r.id))
     // 移除已删除的房间
     for (const [id, g] of eng.roomGroups) {
@@ -677,6 +703,11 @@ export function RoomScene(props: Props) {
       g.add(label)
       eng.scene.add(g)
       eng.roomGroups.set(r.id, g)
+      const doorPivot = g.getObjectByName('doorPivot')
+      if (doorPivot instanceof THREE.Group) {
+        const openAngle = r.params.windowEnd === 'negX' ? -1.6 : 1.6
+        interactions.register(new DoorInteraction(`door:${r.id}`, doorPivot, openAngle))
+      }
 
       let layer = eng.furnitureLayers.get(r.id)
       if (!layer) {
@@ -799,6 +830,8 @@ export function RoomScene(props: Props) {
   useEffect(() => {
     const eng = engineRef.current
     if (!eng || props.view.seq === 0) return
+    interactionSystemRef.current.reset()
+    publishInteractionPrompt(null)
     const st = stateRef.current
     const ar = st.rooms.find((r) => r.id === st.activeRoomId) ?? st.rooms[0]
     const { length: L, width: W, doorOffset, windowEnd } = ar.params
@@ -895,5 +928,10 @@ export function RoomScene(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.view])
 
-  return <div ref={containerRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
+      <InteractionPrompt action={interactionPrompt} />
+    </div>
+  )
 }

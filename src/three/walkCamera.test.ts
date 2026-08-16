@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getWalkOverviewPose } from './walkCamera'
+import { getWalkOverviewPose, updateLookPitch } from './walkCamera'
 import { DEFAULT_ROOM, NO_BUMPS, type RoomConfig } from './types'
 
 const makeRoom = (overrides: Partial<RoomConfig> = {}): RoomConfig => ({
@@ -15,6 +15,12 @@ const makeRoom = (overrides: Partial<RoomConfig> = {}): RoomConfig => ({
 })
 
 describe('漫游默认斜向俯视机位', () => {
+  it('允许看到正下方和正上方但不会翻转视野', () => {
+    expect(updateLookPitch(-1.5, 100)).toBeCloseTo(-Math.PI / 2, 8)
+    expect(updateLookPitch(1.5, -100)).toBeCloseTo(Math.PI / 2, 8)
+    expect(updateLookPitch(0, 100)).toBeCloseTo(-0.4, 8)
+  })
+
   it('位于默认房间斜上方并俯视房间中心', () => {
     const pose = getWalkOverviewPose(makeRoom())
 
