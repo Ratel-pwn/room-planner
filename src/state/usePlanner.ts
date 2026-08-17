@@ -17,6 +17,13 @@ import { loadSaved, makeRoom, makeSpace, nextRoomPosition, normalizeEyeHeight, p
 
 export const CORNER_LABELS = ['左下角', '右下角', '右上角', '左上角'] as const
 
+export function placeFurnitureInRoom(space: SpaceConfig, roomId: string, item: FurnitureItem): SpaceConfig {
+  return {
+    ...space,
+    rooms: space.rooms.map((room) => (room.id === roomId ? { ...room, items: [...room.items, item] } : room)),
+  }
+}
+
 /** 拖房间时的最小间距（米） */
 const ROOM_GAP = 0.06
 
@@ -276,13 +283,15 @@ export function usePlanner() {
   }, [])
 
   const onPlace = useCallback(
-    (type: FurnitureType, x: number, z: number) => {
+    (roomId: string, type: FurnitureType, x: number, z: number) => {
       const id = `${type}-${Date.now().toString(36)}`
-      setItems((list) => [...list, { id, type, x, z, rotation: 0 }])
+      const item: FurnitureItem = { id, type, x, z, rotation: 0 }
+      patchActiveSpace((currentSpace) => placeFurnitureInRoom(currentSpace, roomId, item))
+      setActiveRoomId(roomId)
       setSelectedId(id)
       setPlacingType(null)
     },
-    [setItems],
+    [patchActiveSpace],
   )
 
   const onMove = useCallback(

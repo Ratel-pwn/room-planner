@@ -1,5 +1,24 @@
 import type { RoomObstacle } from './buildRoom'
-import { FURNITURE_DEFS, type FurnitureItem, type FurnitureType } from './types'
+import { FURNITURE_DEFS, type FurnitureItem, type FurnitureType, type RoomConfig } from './types'
+
+/** 找到世界坐标所在的房间，并返回该房间的局部坐标。 */
+export function findRoomPlacementTarget(
+  rooms: RoomConfig[],
+  worldX: number,
+  worldZ: number,
+): { room: RoomConfig; x: number; z: number } | null {
+  for (const room of rooms) {
+    const dx = worldX - room.x
+    const dz = worldZ - room.z
+    const c = Math.cos(room.rotation)
+    const s = Math.sin(room.rotation)
+    // Match THREE.Object3D.rotation.y: world = (c*x + s*z, -s*x + c*z).
+    const x = dx * c - dz * s
+    const z = dx * s + dz * c
+    if (Math.abs(x) <= room.params.length / 2 && Math.abs(z) <= room.params.width / 2) return { room, x, z }
+  }
+  return null
+}
 
 /** 旋转后的占地半尺寸（AABB 近似，仅用于房间边界约束） */
 export function rotatedHalf(type: FurnitureType, rotation: number): { hw: number; hd: number } {

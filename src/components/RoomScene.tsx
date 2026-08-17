@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { InteractionPrompt } from './hud/InteractionPrompt'
-import { buildRoom, type RoomObstacle } from '../three/buildRoom'
-import { clampToRoom, findCollision, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
+import { buildRoom, buildRoomObstacles, type RoomObstacle } from '../three/buildRoom'
+import { clampToRoom, findCollision, findRoomPlacementTarget, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
 import { DoorInteraction } from '../three/doorInteraction'
 import { createFurnitureGhost, createFurnitureMesh, updateFurnitureGhost } from '../three/furniture'
 import { startEyeHeightTransition, stepEyeHeightTransition } from '../three/immersiveCamera'
@@ -36,14 +36,14 @@ function toLocal(wx: number, wz: number, r: RoomConfig): { x: number; z: number 
   const dz = wz - r.z
   const c = Math.cos(r.rotation)
   const s = Math.sin(r.rotation)
-  return { x: dx * c + dz * s, z: -dx * s + dz * c }
+  return { x: dx * c - dz * s, z: dx * s + dz * c }
 }
 
 /** 房间局部坐标 → 空间世界坐标 */
 function toWorld(lx: number, lz: number, r: RoomConfig): { x: number; z: number } {
   const c = Math.cos(r.rotation)
   const s = Math.sin(r.rotation)
-  return { x: r.x + lx * c - lz * s, z: r.z + lx * s + lz * c }
+  return { x: r.x + lx * c + lz * s, z: r.z - lx * s + lz * c }
 }
 
 /** 房间名牌（HUD 风格 sprite，悬浮在房间上方） */
@@ -103,8 +103,8 @@ interface Props {
   onSelect: (id: string | null) => void
   /** 移动家具（当前房间局部坐标） */
   onMove: (id: string, x: number, z: number) => void
-  /** 放置家具（当前房间局部坐标） */
-  onPlace: (type: FurnitureType, x: number, z: number) => void
+  /** 放置家具（目标房间局部坐标） */
+  onPlace: (roomId: string, type: FurnitureType, x: number, z: number) => void
   /** 布局模式：拖拽房间（空间坐标） */
   onMoveRoom: (id: string, x: number, z: number) => void
   /** 布局模式：单击选中房间 */
@@ -235,9 +235,6 @@ export function RoomScene(props: Props) {
       return raycaster.ray.intersectPlane(floorPlane, pt) ? pt : null
     }
 
-    const clamp = (type: FurnitureType, rotation: number, x: number, z: number) =>
-      clampToRoom(getActiveRoom().params, type, rotation, x, z)
-
     const pickFurniture = (): string | null => {
       raycaster.setFromCamera(ndc, camera)
       const roots = [...eng.furniture.values()]
@@ -295,12 +292,23 @@ export function RoomScene(props: Props) {
       if (st.placingType) {
         const pt = floorHit()
         if (pt) {
-          // 世界坐标 → 当前房间局部坐标（含房间旋转）
-          const l = toLocal(pt.x, pt.z, ar)
-          const c = clamp(st.placingType, 0, l.x, l.z)
-          // 与其他家具/墙面设施碰撞时禁止放置
-          if (!findCollision(ar.items, { type: st.placingType, rotation: 0, x: c.x, z: c.z }, 0.02, st.obstacles)) {
-            st.onPlace(st.placingType, c.x, c.z)
+          const target = findRoomPlacementTarget(st.rooms, pt.x, pt.z)
+          if (target) {
+            const position = clampToRoom(target.room.params, st.placingType, 0, target.x, target.z)
+            const targetObstacles =
+              target.room.id === st.activeRoomId
+                ? st.obstacles
+                : buildRoomObstacles(target.room.params, target.room.bumps)
+            if (
+              !findCollision(
+                target.room.items,
+                { type: st.placingType, rotation: 0, ...position },
+                0.02,
+                targetObstacles,
+              )
+            ) {
+              st.onPlace(target.room.id, st.placingType, position.x, position.z)
+            }
           }
         }
         e.stopPropagation()
@@ -348,17 +356,26 @@ export function RoomScene(props: Props) {
       if (st.placingType && eng.ghost) {
         const pt = floorHit()
         if (pt) {
-          const l = toLocal(pt.x, pt.z, ar)
-          const c = clamp(st.placingType, 0, l.x, l.z)
-          eng.ghost.position.set(c.x, 0, c.z)
-          // 碰撞时幽灵变红，提示此处不可放置
-          const blocked = !!findCollision(
-            ar.items,
-            { type: st.placingType, rotation: 0, x: c.x, z: c.z },
-            0.02,
-            st.obstacles,
-          )
-          updateFurnitureGhost(eng.ghost, blocked)
+          const target = findRoomPlacementTarget(st.rooms, pt.x, pt.z)
+          if (!target) {
+            eng.ghost.visible = false
+          } else {
+            const layer = eng.furnitureLayers.get(target.room.id)
+            if (layer && eng.ghost.parent !== layer) layer.add(eng.ghost)
+            const position = clampToRoom(target.room.params, st.placingType, 0, target.x, target.z)
+            eng.ghost.position.set(position.x, 0, position.z)
+            const targetObstacles =
+              target.room.id === st.activeRoomId
+                ? st.obstacles
+                : buildRoomObstacles(target.room.params, target.room.bumps)
+            const blocked = !!findCollision(
+              target.room.items,
+              { type: st.placingType, rotation: 0, ...position },
+              0.02,
+              targetObstacles,
+            )
+            updateFurnitureGhost(eng.ghost, blocked)
+          }
         }
       }
       if (dragging) {

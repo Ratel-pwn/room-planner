@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { buildRoomObstacles } from './buildRoom'
-import { findCollision, walkCollide } from './collision'
+import * as collision from './collision'
 import { buildOfficeLayout } from './presets'
-import { DEFAULT_ROOM, type CornerBump, type FurnitureItem } from './types'
+import { DEFAULT_ROOM, NO_BUMPS, type CornerBump, type FurnitureItem, type RoomConfig } from './types'
+
+const { findCollision, walkCollide } = collision
 
 const desk: FurnitureItem = { id: 'desk', type: 'desk120', x: 0, z: -1.5, rotation: 0 }
 
@@ -158,5 +160,36 @@ describe('角落结构凸起', () => {
   it('漫游撞上凸起会被挡住', () => {
     expect(walkCollide([], obs, 3.45, 1.6)).toBe(true)
     expect(walkCollide([], obs, 2.8, 1.0)).toBe(false)
+  })
+})
+
+describe('跨房间家具放置目标', () => {
+  const room = (id: string, x: number, rotation = 0): RoomConfig => ({
+    id,
+    name: id,
+    x,
+    z: 0,
+    rotation,
+    params: { ...DEFAULT_ROOM },
+    bumps: NO_BUMPS.map((bump) => ({ ...bump })) as RoomConfig['bumps'],
+    items: [],
+  })
+
+  it('指针进入新房间时返回新房间的局部坐标', () => {
+    const api = collision as typeof collision & {
+      findRoomPlacementTarget?: (
+        rooms: RoomConfig[],
+        worldX: number,
+        worldZ: number,
+      ) => { room: RoomConfig; x: number; z: number } | null
+    }
+    expect(api.findRoomPlacementTarget).toBeTypeOf('function')
+    if (!api.findRoomPlacementTarget) return
+
+    const target = api.findRoomPlacementTarget([room('initial', 0), room('added', 8, Math.PI / 2)], 8.25, 0.5)
+    expect(target?.room.id).toBe('added')
+    // THREE.Object3D.rotation.y = +90deg maps local (x, z) to world (z, -x).
+    expect(target?.x).toBeCloseTo(-0.5)
+    expect(target?.z).toBeCloseTo(0.25)
   })
 })
