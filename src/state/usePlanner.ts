@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ViewCommand } from '@/components/RoomScene'
-import { buildRoomObstacles } from '@/three/buildRoom'
+import type { ViewCommand } from '@/features/planner/model/scene'
+import { buildRoomObstacles } from '@/three/obstacles'
 import { clampToRoom, findCollision, rectsOverlap, rotatedRectHalf } from '@/three/collision'
-import { buildOfficeLayout } from '@/three/presets'
 import {
   FURNITURE_DEFS,
   type BumpCorners,
@@ -14,6 +13,7 @@ import {
   type SpaceConfig,
 } from '@/three/types'
 import { loadSaved, makeRoom, makeSpace, nextRoomPosition, normalizeEyeHeight, persist } from './plannerStorage'
+import { createDebouncedWriter } from './persistScheduler'
 
 export const CORNER_LABELS = ['左下角', '右下角', '右上角', '左上角'] as const
 
@@ -52,6 +52,7 @@ export function usePlanner() {
   const [placingType, setPlacingType] = useState<FurnitureType | null>(null)
   // 默认进入 3D 漫游
   const [view, setView] = useState<ViewCommand>({ kind: 'walk', seq: 1 })
+  const [persistScheduler] = useState(() => createDebouncedWriter(persist, 120))
 
   const space = spaces.find((s) => s.id === activeSpaceId) ?? spaces[0]
   const room = space.rooms.find((r) => r.id === activeRoomId) ?? space.rooms[0]
@@ -59,24 +60,30 @@ export function usePlanner() {
   const selected = items.find((i) => i.id === selectedId) ?? null
 
   useEffect(() => {
-    persist({ spaces, activeSpaceId, activeRoomId, eyeHeight })
-  }, [spaces, activeSpaceId, activeRoomId, eyeHeight])
+    persistScheduler.schedule({ spaces, activeSpaceId, activeRoomId, eyeHeight })
+  }, [spaces, activeSpaceId, activeRoomId, eyeHeight, persistScheduler])
+
+  useEffect(() => {
+    const flush = () => persistScheduler.flush()
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      persistScheduler.flush()
+    }
+  }, [persistScheduler])
 
   const setEyeHeight = useCallback((value: number) => {
     setEyeHeightState(normalizeEyeHeight(value))
   }, [])
 
-  /** Esc：取消放置 / 取消选中 / 退回平面模式 */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPlacingType(null)
-        setSelectedId(null)
-        setView((v) => (v.kind === 'walk' || v.kind === 'immersive' ? { kind: 'plan', seq: v.seq + 1 } : v))
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+  const cancelInteraction = useCallback(() => {
+    setPlacingType(null)
+    setSelectedId(null)
+    setView((current) =>
+      current.kind === 'walk' || current.kind === 'immersive'
+        ? { kind: 'plan', seq: current.seq + 1 }
+        : current,
+    )
   }, [])
 
   /** 更新当前空间 */
@@ -155,14 +162,16 @@ export function usePlanner() {
     setView((v) => ({ kind: v.kind, seq: v.seq + 1 }))
   }, [])
 
-  const renameSpace = useCallback(() => {
-    const name = prompt('空间名称', space.name)
-    if (name?.trim()) patchActiveSpace((s) => ({ ...s, name: name.trim() }))
-  }, [space.name, patchActiveSpace])
+  const renameSpace = useCallback(
+    (name: string) => {
+      const normalized = name.trim()
+      if (normalized) patchActiveSpace((current) => ({ ...current, name: normalized }))
+    },
+    [patchActiveSpace],
+  )
 
   const deleteSpace = useCallback(() => {
     if (spaces.length <= 1) return
-    if (!confirm(`删除空间「${space.name}」？其中的所有房间和家具布局会一并删除。`)) return
     const rest = spaces.filter((s) => s.id !== space.id)
     setSpaces(rest)
     setActiveSpaceId(rest[0].id)
@@ -170,7 +179,7 @@ export function usePlanner() {
     setSelectedId(null)
     setPlacingType(null)
     setView((v) => ({ kind: v.kind, seq: v.seq + 1 }))
-  }, [spaces, space.id, space.name])
+  }, [spaces, space.id])
 
   // ── 房间管理（当前空间内）──
   const switchRoom = useCallback(
@@ -202,10 +211,13 @@ export function usePlanner() {
     [space.rooms, room.params, patchActiveSpace],
   )
 
-  const renameRoom = useCallback(() => {
-    const name = prompt('房间名称', room.name)
-    if (name?.trim()) patchActiveRoom((r) => ({ ...r, name: name.trim() }))
-  }, [room.name, patchActiveRoom])
+  const renameRoom = useCallback(
+    (name: string) => {
+      const normalized = name.trim()
+      if (normalized) patchActiveRoom((current) => ({ ...current, name: normalized }))
+    },
+    [patchActiveRoom],
+  )
 
   /** 按 id 删除房间（至少保留一个） */
   const deleteRoomById = useCallback(
@@ -213,7 +225,6 @@ export function usePlanner() {
       if (space.rooms.length <= 1) return
       const target = space.rooms.find((r) => r.id === id)
       if (!target) return
-      if (!confirm(`删除「${target.name}」？其中的家具布局会一并删除。`)) return
       const rest = space.rooms.filter((r) => r.id !== id)
       patchActiveSpace((s) => ({ ...s, rooms: rest }))
       if (id === room.id) {
@@ -225,8 +236,6 @@ export function usePlanner() {
     },
     [space.rooms, room.id, patchActiveSpace],
   )
-
-  const deleteRoom = useCallback(() => deleteRoomById(room.id), [deleteRoomById, room.id])
 
   /** 布局模式：拖拽房间在空间内的位置（防止与其他房间重叠，先整体移、再试单轴滑） */
   const moveRoom = useCallback(
@@ -357,15 +366,8 @@ export function usePlanner() {
   }, [selected, setItems])
 
   const clearItems = useCallback(() => {
-    if (!confirm('清空当前房间的所有家具？')) return
     setItems(() => [])
     setSelectedId(null)
-  }, [setItems])
-
-  const applyOfficePreset = useCallback(() => {
-    setItems(() => buildOfficeLayout())
-    setSelectedId(null)
-    setPlacingType(null)
   }, [setItems])
 
   return {
@@ -384,6 +386,7 @@ export function usePlanner() {
     // 视角
     setViewKind,
     setEyeHeight,
+    cancelInteraction,
     // 空间管理
     switchSpace,
     addSpace,
@@ -393,7 +396,6 @@ export function usePlanner() {
     switchRoom,
     addRoom,
     renameRoom,
-    deleteRoom,
     deleteRoomById,
     moveRoom,
     rotateRoom,
@@ -411,7 +413,6 @@ export function usePlanner() {
     dupSelected,
     delSelected,
     clearItems,
-    applyOfficePreset,
   }
 }
 

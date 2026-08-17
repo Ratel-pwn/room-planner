@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { ViewCommand } from '@/components/RoomScene'
+import type { ViewCommand } from '@/features/planner/model/scene'
 import { cn } from '@/lib/utils'
 import type { SpaceConfig } from '@/three/types'
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { RoomScene, type RoomAnchors, type SelectionAnchor } from '@/components/RoomScene'
+import { RoomScene } from '@/components/RoomScene'
+import type { RoomAnchors, SelectionAnchor } from '@/features/planner/model/scene'
 import { FurnitureBar } from '@/components/hud/FurnitureBar'
 import { RoomFloat } from '@/components/hud/RoomFloat'
 import { SelectionFloat } from '@/components/hud/SelectionFloat'
@@ -30,28 +31,72 @@ export default function PlannerPage() {
 
   const { view, placingType, selected } = planner
   const isLayout = view.kind === 'layout'
+  const { cancelInteraction, togglePlacing } = planner
 
   /** 数字键 1-8 快速选择家具（输入框聚焦、弹窗打开或布局模式下不生效） */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        cancelInteraction()
+        return
+      }
       if (settingsOpen || helpOpen || furnitureSettingsOpen || newRoomOpen || roomSettingsId || isLayout) return
       const el = e.target as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable))
         return
       const n = parseInt(e.key, 10)
-      if (n >= 1 && n <= HOTKEY_ORDER.length) planner.togglePlacing(HOTKEY_ORDER[n - 1])
+      if (n >= 1 && n <= HOTKEY_ORDER.length) togglePlacing(HOTKEY_ORDER[n - 1])
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, helpOpen, furnitureSettingsOpen, newRoomOpen, roomSettingsId, isLayout, planner])
+  }, [settingsOpen, helpOpen, furnitureSettingsOpen, newRoomOpen, roomSettingsId, isLayout, cancelInteraction, togglePlacing])
 
-  // 离开布局模式时关掉布局专属窗口
-  useEffect(() => {
-    if (!isLayout) {
-      setNewRoomOpen(false)
-      setRoomSettingsId(null)
-    }
-  }, [isLayout])
+  const closeLayoutWindows = () => {
+    setNewRoomOpen(false)
+    setRoomSettingsId(null)
+  }
+
+  const changeView = (kind: typeof view.kind) => {
+    if (kind !== 'layout') closeLayoutWindows()
+    planner.setViewKind(kind)
+  }
+
+  const switchSpace = (id: string) => {
+    closeLayoutWindows()
+    planner.switchSpace(id)
+  }
+
+  const enterRoom = (id: string) => {
+    closeLayoutWindows()
+    planner.enterRoom(id)
+  }
+
+  const renameSpace = () => {
+    const name = prompt('空间名称', planner.space.name)
+    if (name !== null) planner.renameSpace(name)
+  }
+
+  const deleteSpace = () => {
+    if (!confirm(`删除空间「${planner.space.name}」？其中的所有房间和家具布局会一并删除。`)) return
+    closeLayoutWindows()
+    planner.deleteSpace()
+  }
+
+  const renameRoom = () => {
+    const name = prompt('房间名称', planner.room.name)
+    if (name !== null) planner.renameRoom(name)
+  }
+
+  const deleteRoomById = (id: string) => {
+    const target = planner.space.rooms.find((room) => room.id === id)
+    if (!target || !confirm(`删除「${target.name}」？其中的家具布局会一并删除。`)) return
+    planner.deleteRoomById(id)
+    if (roomSettingsId === id) setRoomSettingsId(null)
+  }
+
+  const clearItems = () => {
+    if (confirm('清空当前房间的所有家具？')) planner.clearItems()
+  }
 
   /** 打开某房间的设置：先切为当前房间，再开窗口（窗口编辑的始终是当前房间） */
   const openRoomSettings = (id: string) => {
@@ -80,7 +125,7 @@ export default function PlannerPage() {
         onPlace={planner.onPlace}
         onMoveRoom={planner.moveRoom}
         onPickRoom={planner.switchRoom}
-        onEnterRoom={planner.enterRoom}
+        onEnterRoom={enterRoom}
       />
 
       {/* 顶部 HUD */}
@@ -89,9 +134,9 @@ export default function PlannerPage() {
         spaces={planner.spaces}
         viewKind={view.kind}
         placedTotal={planner.placedTotal}
-        onSwitchSpace={planner.switchSpace}
+        onSwitchSpace={switchSpace}
         onAddSpace={planner.addSpace}
-        onViewChange={planner.setViewKind}
+        onViewChange={changeView}
         onOpenHelp={() => setHelpOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
@@ -134,7 +179,7 @@ export default function PlannerPage() {
                 const target = planner.space.rooms.find((x) => x.id === id)
                 if (target) planner.rotateRoom(id, target.rotation + Math.PI / 2)
               }}
-              onDelete={planner.deleteRoomById}
+              onDelete={deleteRoomById}
             />
           ))}
           <button
@@ -160,8 +205,8 @@ export default function PlannerPage() {
               patchBump={planner.patchBump}
               moveRoom={planner.moveRoom}
               rotateRoom={planner.rotateRoom}
-              renameRoom={planner.renameRoom}
-              deleteRoom={planner.deleteRoom}
+              renameRoom={renameRoom}
+              deleteRoom={() => deleteRoomById(planner.room.id)}
             />
           )}
         </>
@@ -173,8 +218,8 @@ export default function PlannerPage() {
         onOpenChange={setSettingsOpen}
         space={planner.space}
         canDeleteSpace={planner.spaces.length > 1}
-        renameSpace={planner.renameSpace}
-        deleteSpace={planner.deleteSpace}
+        renameSpace={renameSpace}
+        deleteSpace={deleteSpace}
         eyeHeight={planner.eyeHeight}
         setEyeHeight={planner.setEyeHeight}
       />
@@ -183,7 +228,7 @@ export default function PlannerPage() {
         open={furnitureSettingsOpen}
         onOpenChange={setFurnitureSettingsOpen}
         itemCount={planner.items.length}
-        clearItems={planner.clearItems}
+        clearItems={clearItems}
         onPick={planner.togglePlacing}
       />
     </div>

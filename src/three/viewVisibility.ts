@@ -1,5 +1,5 @@
-export type SceneViewKind = 'plan' | 'walk' | 'immersive' | 'layout'
+import type { ViewKind } from '@/features/planner/model/scene'
 
-export function shouldShowRoomLabel(viewKind: SceneViewKind): boolean {
+export function shouldShowRoomLabel(viewKind: ViewKind): boolean {
   return viewKind !== 'layout'
 }

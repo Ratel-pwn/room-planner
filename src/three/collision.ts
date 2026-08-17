@@ -1,4 +1,4 @@
-import type { RoomObstacle } from './buildRoom'
+import type { RoomObstacle } from './obstacles'
 import { FURNITURE_DEFS, type FurnitureItem, type FurnitureType, type RoomConfig } from './types'
 
 /** 找到世界坐标所在的房间，并返回该房间的局部坐标。 */

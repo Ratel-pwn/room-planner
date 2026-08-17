@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Copy, RotateCcw, RotateCw, Trash2, X } from 'lucide-react'
-import type { SelectionAnchor } from '@/components/RoomScene'
+import type { SelectionAnchor } from '@/features/planner/model/scene'
 import { FURNITURE_DEFS, type FurnitureItem } from '@/three/types'
 
 interface Props {

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { RotateCw, Settings2, Trash2 } from 'lucide-react'
-import type { RoomAnchors } from '@/components/RoomScene'
+import type { RoomAnchors } from '@/features/planner/model/scene'
 import type { RoomConfig } from '@/three/types'
 import { cn } from '@/lib/utils'
 

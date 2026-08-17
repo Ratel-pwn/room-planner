@@ -2,32 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { InteractionPrompt } from './hud/InteractionPrompt'
-import { buildRoom, buildRoomObstacles, makeDimensionSprite, type RoomObstacle } from '../three/buildRoom'
-import { clampToRoom, findCollision, findRoomPlacementTarget, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
+import type { RoomAnchors, SelectionAnchor, ViewCommand } from '../features/planner/model/scene'
+import { buildRoom, makeDimensionSprite } from '../three/buildRoom'
+import { clampToRoom, findCollision, findRoomPlacementTarget, rotatedRectHalf, walkCollide } from '../three/collision'
 import { DoorInteraction } from '../three/doorInteraction'
 import { createFurnitureGhost, createFurnitureMesh, getFurnitureDimensionLabels, updateFurnitureGhost } from '../three/furniture'
+import {
+  commitFurnitureDrag,
+  moveFurnitureDrag,
+  startFurnitureDrag,
+  type FurnitureDragState,
+} from '../three/furnitureDrag'
 import { startEyeHeightTransition, stepEyeHeightTransition } from '../three/immersiveCamera'
 import { InteractionSystem, isInteractionKeyPress } from '../three/interaction'
+import { buildRoomObstacles, type RoomObstacle } from '../three/obstacles'
+import { shouldHandleSceneKeyboard } from '../three/sceneInput'
+import { disposeObjectTree } from '../three/sceneResources'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
 import { shouldShowRoomLabel } from '../three/viewVisibility'
 import { getWalkOverviewPose, updateLookPitch } from '../three/walkCamera'
-
-/** plan = 平面模式；walk = 自由漫游；immersive = 沉浸体验；layout = 空间布局（拖拽房间位置） */
-export type ViewCommand = { kind: 'plan' | 'walk' | 'immersive' | 'layout'; seq: number }
-
-/** 选中家具的屏幕投影锚点（每帧由 RoomScene 写入，供悬浮操作条跟随） */
-export interface SelectionAnchor {
-  /** 家具顶部上方的屏幕点（悬浮条定位用） */
-  x: number
-  y: number
-  /** 家具中心的屏幕点（旋转把手算角度用） */
-  cx: number
-  cy: number
-  visible: boolean
-}
-
-/** 布局模式下每个房间的屏幕锚点（供房间浮动工具条跟随） */
-export type RoomAnchors = Record<string, { x: number; y: number; visible: boolean }>
 
 /** smoothstep 缓动 */
 /** 空间世界坐标 → 房间局部坐标（考虑房间旋转） */
@@ -70,20 +63,6 @@ function makeRoomLabel(text: string): THREE.Sprite {
   sp.scale.set(1.7, 0.43, 1)
   sp.userData.isLabel = true
   return sp
-}
-
-function disposeTree(root: THREE.Object3D) {
-  root.traverse((o) => {
-    if (o instanceof THREE.Mesh) {
-      o.geometry.dispose()
-      const m = o.material
-      if (Array.isArray(m)) m.forEach((x) => x.dispose())
-      else m.dispose()
-    } else if (o instanceof THREE.Sprite) {
-      o.material.map?.dispose()
-      o.material.dispose()
-    }
-  })
 }
 
 interface Props {
@@ -222,7 +201,7 @@ export function RoomScene(props: Props) {
     const fwdV = new THREE.Vector3() // 漫游：摄像机前向（含俯仰）
     const moveV = new THREE.Vector3() // 漫游：本帧合成移动向量
     const projV = new THREE.Vector3() // 选中家具屏幕投影临时向量
-    let dragging: { id: string; dx: number; dz: number } | null = null
+    let dragging: FurnitureDragState | null = null
     let roomDrag: { id: string; dx: number; dz: number } | null = null
     let downAt: { x: number; y: number } | null = null
 
@@ -324,7 +303,7 @@ export function RoomScene(props: Props) {
         const pt = floorHit()
         if (item && pt) {
           const l = toLocal(pt.x, pt.z, ar)
-          dragging = { id, dx: item.x - l.x, dz: item.z - l.z }
+          dragging = startFurnitureDrag(item, l)
           controls.enabled = false
         }
         e.stopPropagation() // 拖家具时不平移平面图
@@ -387,15 +366,13 @@ export function RoomScene(props: Props) {
           if (item) {
             // 碰撞解算：能全移则全移，否则沿墙滑动，都撞则不动（房间局部坐标）
             const l = toLocal(pt.x, pt.z, ar)
-            const c = resolveDrag(
-              ar.items,
-              ar.params,
-              item,
-              l.x + dragging.dx,
-              l.z + dragging.dz,
-              st.obstacles,
-            )
-            st.onMove(dragging.id, c.x, c.z)
+            dragging = moveFurnitureDrag(dragging, ar.items, ar.params, item, l, st.obstacles)
+            const mesh = eng.furniture.get(dragging.id)
+            if (mesh) mesh.position.set(dragging.x, 0, dragging.z)
+            if (eng.dimensions && st.selectedId === dragging.id) {
+              eng.dimensions.position.set(dragging.x, 0, dragging.z)
+            }
+            eng.highlight?.update()
           }
         }
       }
@@ -421,6 +398,7 @@ export function RoomScene(props: Props) {
       const st = stateRef.current
       const wasDrag = dragging
       dragging = null
+      if (wasDrag) commitFurnitureDrag(wasDrag, st.onMove)
       controls.enabled = modeRef.current === 'plan'
       // 纯点击空白处 → 取消选择
       if (!wasDrag && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 4 && !st.placingType) {
@@ -445,7 +423,7 @@ export function RoomScene(props: Props) {
 
     // 漫游键盘输入
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
+      if (!shouldHandleSceneKeyboard(modeRef.current, e.target as HTMLElement | null)) return
       // 阻止 Space 触发聚焦按钮 / 页面滚动
       if (e.key === ' ') e.preventDefault()
       if (
@@ -649,6 +627,10 @@ export function RoomScene(props: Props) {
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
       controls.dispose()
+      for (const group of eng.roomGroups.values()) disposeObjectTree(group)
+      for (const group of eng.furniture.values()) disposeObjectTree(group)
+      if (eng.ghost) disposeObjectTree(eng.ghost)
+      if (eng.dimensions) disposeObjectTree(eng.dimensions)
       renderer.dispose()
       container.removeChild(renderer.domElement)
       interactions.clear()
@@ -670,7 +652,7 @@ export function RoomScene(props: Props) {
     for (const [id, g] of eng.roomGroups) {
       if (!ids.has(id)) {
         eng.scene.remove(g)
-        disposeTree(g)
+        disposeObjectTree(g)
         eng.roomGroups.delete(id)
       }
     }
@@ -685,7 +667,7 @@ export function RoomScene(props: Props) {
       const old = eng.roomGroups.get(r.id)
       if (old) {
         eng.scene.remove(old)
-        disposeTree(old)
+        disposeObjectTree(old)
       }
       const g = buildRoom(r.params, r.bumps)
       g.userData.roomId = r.id
@@ -764,6 +746,7 @@ export function RoomScene(props: Props) {
     for (const [id, g] of eng.furniture) {
       if (!seen.has(id)) {
         g.parent?.remove(g)
+        disposeObjectTree(g)
         eng.furniture.delete(id)
       }
     }
@@ -794,7 +777,7 @@ export function RoomScene(props: Props) {
     if (!eng) return
     if (eng.dimensions) {
       eng.dimensions.parent?.remove(eng.dimensions)
-      disposeTree(eng.dimensions)
+      disposeObjectTree(eng.dimensions)
       eng.dimensions = null
     }
     if (!props.selectedId || props.view.kind === 'layout') return
@@ -818,7 +801,7 @@ export function RoomScene(props: Props) {
     return () => {
       if (eng.dimensions !== dimensions) return
       dimensions.parent?.remove(dimensions)
-      disposeTree(dimensions)
+      disposeObjectTree(dimensions)
       eng.dimensions = null
     }
   }, [props.selectedId, props.view.kind])
@@ -841,6 +824,7 @@ export function RoomScene(props: Props) {
     if (!eng) return
     if (eng.ghost) {
       eng.ghost.parent?.remove(eng.ghost)
+      disposeObjectTree(eng.ghost)
       eng.ghost = null
     }
     if (props.placingType) {

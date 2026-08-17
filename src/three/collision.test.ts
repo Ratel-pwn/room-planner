@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRoomObstacles } from './buildRoom'
+import { buildRoomObstacles } from './obstacles'
 import * as collision from './collision'
 import { buildOfficeLayout } from './presets'
 import { DEFAULT_ROOM, NO_BUMPS, type CornerBump, type FurnitureItem, type RoomConfig } from './types'
