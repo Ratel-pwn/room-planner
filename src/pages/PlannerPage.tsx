@@ -68,6 +68,7 @@ export default function PlannerPage() {
         selectedId={planner.selectedId}
         placingType={placingType}
         view={view}
+        eyeHeight={planner.eyeHeight}
         selectionAnchor={anchorRef}
         roomAnchors={roomAnchorsRef}
         onSelect={planner.setSelectedId}
@@ -165,6 +166,8 @@ export default function PlannerPage() {
         canDeleteSpace={planner.spaces.length > 1}
         renameSpace={planner.renameSpace}
         deleteSpace={planner.deleteSpace}
+        eyeHeight={planner.eyeHeight}
+        setEyeHeight={planner.setEyeHeight}
       />
     </div>
   )

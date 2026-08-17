@@ -13,7 +13,7 @@ import {
   type RoomParams,
   type SpaceConfig,
 } from '@/three/types'
-import { loadSaved, makeRoom, makeSpace, nextRoomPosition, persist } from './plannerStorage'
+import { loadSaved, makeRoom, makeSpace, nextRoomPosition, normalizeEyeHeight, persist } from './plannerStorage'
 
 export const CORNER_LABELS = ['左下角', '右下角', '右上角', '左上角'] as const
 
@@ -40,6 +40,7 @@ export function usePlanner() {
   const [spaces, setSpaces] = useState<SpaceConfig[]>(saved.spaces)
   const [activeSpaceId, setActiveSpaceId] = useState<string>(saved.activeSpaceId)
   const [activeRoomId, setActiveRoomId] = useState<string>(saved.activeRoomId)
+  const [eyeHeight, setEyeHeightState] = useState(saved.eyeHeight)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [placingType, setPlacingType] = useState<FurnitureType | null>(null)
   // 默认进入 3D 漫游
@@ -51,8 +52,12 @@ export function usePlanner() {
   const selected = items.find((i) => i.id === selectedId) ?? null
 
   useEffect(() => {
-    persist({ spaces, activeSpaceId, activeRoomId })
-  }, [spaces, activeSpaceId, activeRoomId])
+    persist({ spaces, activeSpaceId, activeRoomId, eyeHeight })
+  }, [spaces, activeSpaceId, activeRoomId, eyeHeight])
+
+  const setEyeHeight = useCallback((value: number) => {
+    setEyeHeightState(normalizeEyeHeight(value))
+  }, [])
 
   /** Esc：取消放置 / 取消选中 / 退回平面模式 */
   useEffect(() => {
@@ -364,10 +369,12 @@ export function usePlanner() {
     selectedId,
     placingType,
     view,
+    eyeHeight,
     obstacles,
     placedTotal,
     // 视角
     setViewKind,
+    setEyeHeight,
     // 空间管理
     switchSpace,
     addSpace,

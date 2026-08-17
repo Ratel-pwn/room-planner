@@ -8,6 +8,7 @@ import {
   type SpaceConfig,
 } from '@/three/types'
 
+const LS_V5 = 'room-planner-v5'
 const LS_V4 = 'room-planner-v4'
 const LS_V3 = 'room-planner-v3'
 const LS_V2 = 'room-planner-v2'
@@ -17,6 +18,20 @@ export interface SavedStateV4 {
   spaces: SpaceConfig[]
   activeSpaceId: string
   activeRoomId: string
+}
+
+export interface SavedStateV5 extends SavedStateV4 {
+  eyeHeight: number
+}
+
+export const DEFAULT_EYE_HEIGHT = 1.7
+export const MIN_EYE_HEIGHT = 1
+export const MAX_EYE_HEIGHT = 2.5
+
+export function normalizeEyeHeight(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= MIN_EYE_HEIGHT && value <= MAX_EYE_HEIGHT
+    ? value
+    : DEFAULT_EYE_HEIGHT
 }
 
 export function makeRoom(name: string, x = 0, z = 0, params?: Partial<RoomParams>): RoomConfig {
@@ -66,13 +81,27 @@ function normalizeRooms(rooms: LegacyRoom[]): RoomConfig[] {
   })
 }
 
-export function loadSaved(): SavedStateV4 {
+export function loadSaved(): SavedStateV5 {
+  // v5
+  try {
+    const raw = localStorage.getItem(LS_V5)
+    if (raw) {
+      const s = JSON.parse(raw) as SavedStateV5
+      if (s.spaces?.length && s.spaces[0].rooms?.length) {
+        return { ...s, eyeHeight: normalizeEyeHeight(s.eyeHeight) }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   // v4
   try {
     const raw = localStorage.getItem(LS_V4)
     if (raw) {
       const s = JSON.parse(raw) as SavedStateV4
-      if (s.spaces?.length && s.spaces[0].rooms?.length) return s
+      if (s.spaces?.length && s.spaces[0].rooms?.length) {
+        return { ...s, eyeHeight: DEFAULT_EYE_HEIGHT }
+      }
     }
   } catch {
     /* ignore */
@@ -89,13 +118,14 @@ export function loadSaved(): SavedStateV4 {
             spaces: s.spaces.map((sp) => ({ ...sp, rooms: normalizeRooms(sp.rooms) })),
             activeSpaceId: s.activeSpaceId ?? s.spaces[0].id,
             activeRoomId: s.activeRoomId ?? s.spaces[0].rooms[0].id,
+            eyeHeight: DEFAULT_EYE_HEIGHT,
           }
         }
         if (s.rooms?.length) {
           const space = makeSpace('空间 1')
           space.rooms = normalizeRooms(s.rooms)
           const active = space.rooms.find((r) => r.id === s.activeRoomId) ?? space.rooms[0]
-          return { spaces: [space], activeSpaceId: space.id, activeRoomId: active.id }
+          return { spaces: [space], activeSpaceId: space.id, activeRoomId: active.id, eyeHeight: DEFAULT_EYE_HEIGHT }
         }
       }
     } catch {
@@ -112,15 +142,15 @@ export function loadSaved(): SavedStateV4 {
       room.params = { ...DEFAULT_ROOM, ...s.room }
       room.items = s.items ?? []
       space.rooms = [room]
-      return { spaces: [space], activeSpaceId: space.id, activeRoomId: room.id }
+      return { spaces: [space], activeSpaceId: space.id, activeRoomId: room.id, eyeHeight: DEFAULT_EYE_HEIGHT }
     }
   } catch {
     /* ignore */
   }
   const space = makeSpace('空间 1')
-  return { spaces: [space], activeSpaceId: space.id, activeRoomId: space.rooms[0].id }
+  return { spaces: [space], activeSpaceId: space.id, activeRoomId: space.rooms[0].id, eyeHeight: DEFAULT_EYE_HEIGHT }
 }
 
-export function persist(state: SavedStateV4) {
-  localStorage.setItem(LS_V4, JSON.stringify(state))
+export function persist(state: SavedStateV5) {
+  localStorage.setItem(LS_V5, JSON.stringify({ ...state, eyeHeight: normalizeEyeHeight(state.eyeHeight) }))
 }

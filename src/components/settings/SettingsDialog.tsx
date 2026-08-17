@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Building2, CircleHelp, Pencil, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { SpaceConfig } from '@/three/types'
-import { Section } from './fields'
+import { NumField, Section } from './fields'
 
 const HELP_ITEMS: Array<{ title: string; keys: string }> = [
   { title: '布局模式', keys: '拖动房间摆放位置 · 房间上方悬浮条可设置 / 旋转 / 删除 · 右下角 + 新增房间 · 双击进入房间' },
@@ -19,6 +19,8 @@ interface Props {
   canDeleteSpace: boolean
   renameSpace: () => void
   deleteSpace: () => void
+  eyeHeight: number
+  setEyeHeight: (value: number) => void
 }
 
 /** 全局设置弹窗：空间管理 + 操作说明（房间设置在各房间的悬浮窗口里） */
@@ -67,6 +69,18 @@ export function SettingsDialog(p: Props) {
           <p className="text-[11px] leading-4 text-[#7d7666]">
             房间的新增、删除与参数设置：切到「布局」模式，用场景里的 + 和每个房间的悬浮条操作。
           </p>
+        </Section>
+
+        <Section title="沉浸设置">
+          <NumField
+            label="眼高（米）"
+            value={p.eyeHeight}
+            min={1}
+            max={2.5}
+            step={0.05}
+            onChange={p.setEyeHeight}
+          />
+          <p className="text-[11px] leading-4 text-[#7d7666]">对所有空间和房间生效，默认为 1.7 米。</p>
         </Section>
       </DialogContent>
     </Dialog>

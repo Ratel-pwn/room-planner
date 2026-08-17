@@ -6,6 +6,7 @@ import { buildRoom, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
 import { DoorInteraction } from '../three/doorInteraction'
 import { createFurnitureMesh } from '../three/furniture'
+import { startEyeHeightTransition, stepEyeHeightTransition } from '../three/immersiveCamera'
 import { InteractionSystem, isInteractionKeyPress } from '../three/interaction'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
 import { shouldShowRoomLabel } from '../three/viewVisibility'
@@ -29,11 +30,6 @@ export interface SelectionAnchor {
 export type RoomAnchors = Record<string, { x: number; y: number; visible: boolean }>
 
 /** smoothstep 缓动 */
-function smooth(t: number, a: number, b: number): number {
-  const x = Math.max(0, Math.min(1, (t - a) / (b - a)))
-  return x * x * (3 - 2 * x)
-}
-
 /** 空间世界坐标 → 房间局部坐标（考虑房间旋转） */
 function toLocal(wx: number, wz: number, r: RoomConfig): { x: number; z: number } {
   const dx = wx - r.x
@@ -100,6 +96,7 @@ interface Props {
   selectedId: string | null
   placingType: FurnitureType | null
   view: ViewCommand
+  eyeHeight: number
   selectionAnchor?: React.RefObject<SelectionAnchor>
   /** 布局模式下每个房间的屏幕锚点（每帧写入） */
   roomAnchors?: React.RefObject<RoomAnchors>
@@ -130,6 +127,7 @@ export function RoomScene(props: Props) {
   }, [])
 
   const modeRef = useRef<'plan' | 'walk' | 'immersive' | 'layout'>('plan')
+  const activeRoomRef = useRef(props.activeRoomId)
   const walkRef = useRef({
     yaw: 0,
     pitch: 0,
@@ -138,18 +136,11 @@ export function RoomScene(props: Props) {
   })
   // 沉浸模式状态机
   const immersiveRef = useRef({
-    phase: 'entering' as 'entering' | 'free',
-    t: 0,
+    heightTransition: startEyeHeightTransition(0, 0),
     y: 0, // 离地高度（跳跃）
     vy: 0,
     grounded: true,
     bob: 0, // 头部摆动相位
-    outX: 0, // 屋外起点 X
-    outZ: 0, // 屋外起点 Z
-    inX: 0, // 屋内终点 X
-    inZ: 0, // 屋内终点 Z
-    doorZ: 0,
-    openAngle: 0,
   })
 
   const engineRef = useRef<{
@@ -447,7 +438,7 @@ export function RoomScene(props: Props) {
       if (
         isInteractionKeyPress(e.key, e.repeat) &&
         modeRef.current === 'immersive' &&
-        immersiveRef.current.phase === 'free' &&
+        immersiveRef.current.heightTransition.phase === 'ready' &&
         interactions.interactFocused()
       ) {
         e.preventDefault()
@@ -510,23 +501,11 @@ export function RoomScene(props: Props) {
         const W = ar.params.width
         const im = immersiveRef.current
 
-        if (im.phase === 'entering') {
+        if (im.heightTransition.phase !== 'ready') {
           publishInteractionPrompt(null)
-          // 开门 → 走入 → 关门 的启动动画
-          im.t += dt
-          const pivot = eng.roomGroups.get(ar.id)?.getObjectByName('doorPivot')
-          if (pivot) {
-            const a = Math.max(0, Math.min(1, smooth(im.t, 0.5, 1.4) - smooth(im.t, 3.0, 3.8)))
-            pivot.rotation.y = im.openAngle * a
-          }
-          const k = smooth(im.t, 1.2, 3.0)
-          camera.position.set(
-            im.outX + (im.inX - im.outX) * k,
-            1.6,
-            im.outZ + (im.inZ - im.outZ) * k,
-          )
+          im.heightTransition = stepEyeHeightTransition(im.heightTransition, dt, st.eyeHeight)
+          camera.position.y = im.heightTransition.y
           camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
-          if (im.t > 3.9) im.phase = 'free'
         } else {
           // 落地移动：走 / 跑 / 跳，有碰撞
           const k = walkRef.current.keys
@@ -586,7 +565,7 @@ export function RoomScene(props: Props) {
             im.bob += dt * speed * 2.4
             bobY = Math.abs(Math.sin(im.bob)) * (speed > 3 ? 0.045 : 0.03)
           }
-          camera.position.y = 1.6 + im.y + bobY
+          camera.position.y = st.eyeHeight + im.y + bobY
           camera.rotation.set(walkRef.current.pitch, walkRef.current.yaw, 0)
           camera.getWorldDirection(fwdV)
           const focus = interactions.update(camera.position, fwdV, dt)
@@ -832,11 +811,14 @@ export function RoomScene(props: Props) {
   useEffect(() => {
     const eng = engineRef.current
     if (!eng || props.view.seq === 0) return
+    const previousMode = modeRef.current
+    const roomChanged = activeRoomRef.current !== props.activeRoomId
+    activeRoomRef.current = props.activeRoomId
     interactionSystemRef.current.reset()
     publishInteractionPrompt(null)
     const st = stateRef.current
     const ar = st.rooms.find((r) => r.id === st.activeRoomId) ?? st.rooms[0]
-    const { length: L, width: W, doorOffset, windowEnd } = ar.params
+    const { length: L, width: W } = ar.params
     const ox = ar.x
     const oz = ar.z
 
@@ -846,16 +828,6 @@ export function RoomScene(props: Props) {
         if (object.userData.isLabel) object.visible = showRoomLabels
       })
     }
-
-    // 离开沉浸模式时把门关上
-    const pivot = eng.roomGroups.get(ar.id)?.getObjectByName('doorPivot')
-    if (pivot && props.view.kind !== 'immersive') pivot.rotation.y = 0
-
-    // 门的局部坐标 / 门外方向（局部 +X 或 -X）
-    const doorLx = windowEnd === 'negX' ? L / 2 : -L / 2
-    const out = windowEnd === 'negX' ? 1 : -1
-    // 面朝房间内的摄像机朝向（含房间旋转）
-    const baseYaw = (windowEnd === 'negX' ? Math.PI / 2 : -Math.PI / 2) + ar.rotation
 
     if (props.view.kind === 'layout') {
       // 空间布局：正俯视整个空间，拖拽房间位置
@@ -886,43 +858,41 @@ export function RoomScene(props: Props) {
     }
 
     if (props.view.kind === 'walk') {
-      // 自由漫游：无碰撞摄像机，以斜向俯视机位展示当前房间
       modeRef.current = 'walk'
       eng.controls.enabled = false
+      eng.camera.rotation.order = 'YXZ'
+      walkRef.current.keys.clear()
+      if (previousMode === 'immersive' && !roomChanged) {
+        return
+      }
+      // 首次进入漫游或切换房间时仍使用项目原有的默认机位。
       const pose = getWalkOverviewPose(ar)
       eng.camera.position.set(pose.x, pose.y, pose.z)
-      eng.camera.rotation.order = 'YXZ'
       walkRef.current.yaw = pose.yaw
       walkRef.current.pitch = pose.pitch
-      walkRef.current.keys.clear()
       eng.camera.rotation.set(pose.pitch, pose.yaw, 0)
       return
     }
 
     if (props.view.kind === 'immersive') {
-      // 沉浸体验：从当前房间门外开始，播开门进屋动画
       modeRef.current = 'immersive'
       eng.controls.enabled = false
       const im = immersiveRef.current
-      im.phase = 'entering'
-      im.t = 0
+      if (roomChanged) {
+        eng.camera.position.x = ar.x
+        eng.camera.position.z = ar.z
+      }
+      const orientation = eng.camera.quaternion.clone()
+      eng.camera.rotation.order = 'YXZ'
+      eng.camera.quaternion.copy(orientation)
+      walkRef.current.yaw = eng.camera.rotation.y
+      walkRef.current.pitch = eng.camera.rotation.x
+      walkRef.current.keys.clear()
+      im.heightTransition = startEyeHeightTransition(eng.camera.position.y, st.eyeHeight)
       im.y = 0
       im.vy = 0
       im.grounded = true
       im.bob = 0
-      const outW = toWorld(doorLx + out * 1.7, doorOffset, ar)
-      const inW = toWorld(doorLx - out * 1.1, doorOffset, ar)
-      im.outX = outW.x
-      im.outZ = outW.z
-      im.inX = inW.x
-      im.inZ = inW.z
-      im.openAngle = windowEnd === 'negX' ? -1.6 : 1.6
-      eng.camera.position.set(im.outX, 1.6, im.outZ)
-      eng.camera.rotation.order = 'YXZ'
-      walkRef.current.yaw = baseYaw
-      walkRef.current.pitch = 0
-      walkRef.current.keys.clear()
-      eng.camera.rotation.set(0, walkRef.current.yaw, 0)
       return
     }
 
