@@ -82,7 +82,7 @@ export function SelectionFloat({ anchor, selected, onRotate, onRotateTo, onDupli
       {/* 操作条 */}
       <div className="hud-panel flex items-center gap-2 px-2.5 py-1.5">
         <span className="max-w-[130px] truncate text-xs font-semibold text-[#ece7da]">
-          {FURNITURE_DEFS[selected.type].label}
+          {FURNITURE_DEFS[selected.type].short}
         </span>
         <span className="w-9 text-right text-xs tabular-nums text-[#f2c353]">{deg}°</span>
         <span className="h-5 w-0.5 rounded bg-black/60" />

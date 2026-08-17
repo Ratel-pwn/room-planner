@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { FurnitureType } from './types'
+import { FURNITURE_DEFS, type FurnitureType } from './types'
 
 const WOOD = 0xc9a06b
 const WOOD_DARK = 0x8f6b42
@@ -9,6 +9,14 @@ const SHELF_COLOR = 0xb98d5e
 const OFFICE_FRAME = 0xe4e4df
 const OFFICE_DIVIDER = 0xc7cdca
 const CABLE_HOLE = 0x4c4c50
+
+export function getFurnitureDimensionLabels(type: FurnitureType): Array<{ text: string; x: number; z: number }> {
+  const { w, d } = FURNITURE_DEFS[type]
+  return [
+    { text: `${w.toFixed(2)} m`, x: 0, z: d / 2 + 0.32 },
+    { text: `${d.toFixed(2)} m`, x: w / 2 + 0.48, z: 0 },
+  ]
+}
 
 function mat(color: number, roughness = 0.7): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness })

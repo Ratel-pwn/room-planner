@@ -55,4 +55,21 @@ describe('shared office workstation models', () => {
     expect(ghost.visible).toBe(true)
     expect(materials.every((material) => material.color.getHex() === 0xe05555)).toBe(true)
   })
+
+  it('places selected furniture dimensions outside the matching edges', () => {
+    const api = furniture as typeof furniture & {
+      getFurnitureDimensionLabels?: (type: FurnitureType) => Array<{ text: string; x: number; z: number }>
+    }
+
+    expect(api.getFurnitureDimensionLabels).toBeTypeOf('function')
+    if (!api.getFurnitureDimensionLabels) return
+
+    const labels = api.getFurnitureDimensionLabels('desk120')
+
+    expect(labels).toHaveLength(2)
+    expect(labels[0]).toMatchObject({ text: '1.20 m', x: 0 })
+    expect(labels[0].z).toBeGreaterThan(FURNITURE_DEFS.desk120.d / 2)
+    expect(labels[1]).toMatchObject({ text: '0.60 m', z: 0 })
+    expect(labels[1].x).toBeGreaterThan(FURNITURE_DEFS.desk120.w / 2)
+  })
 })

@@ -76,7 +76,7 @@ function baseboard(len: number): THREE.Mesh {
   return box(len, 0.08, 0.012, BASEBOARD_COLOR, { roughness: 0.6 })
 }
 
-function makeTextSprite(text: string, scale = 1): THREE.Sprite {
+export function makeDimensionSprite(text: string, scale = 1): THREE.Sprite {
   const cv = document.createElement('canvas')
   cv.width = 512
   cv.height = 128
@@ -280,13 +280,13 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
   }
 
   // ── 尺寸标注 ──
-  const dimL = makeTextSprite(`${L.toFixed(2)} m`)
+  const dimL = makeDimensionSprite(`${L.toFixed(2)} m`)
   dimL.position.set(0, 0.02, W / 2 + 0.55)
   room.add(dimL)
-  const dimW = makeTextSprite(`${W.toFixed(2)} m`)
+  const dimW = makeDimensionSprite(`${W.toFixed(2)} m`)
   dimW.position.set(L / 2 + 0.85, 0.02, 0)
   room.add(dimW)
-  const dimH = makeTextSprite(`高 ${H.toFixed(2)} m`, 0.8)
+  const dimH = makeDimensionSprite(`高 ${H.toFixed(2)} m`, 0.8)
   dimH.position.set(-L / 2 + 0.5, H + 0.25, -W / 2 + 0.5)
   room.add(dimH)
 

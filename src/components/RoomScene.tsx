@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { InteractionPrompt } from './hud/InteractionPrompt'
-import { buildRoom, buildRoomObstacles, type RoomObstacle } from '../three/buildRoom'
+import { buildRoom, buildRoomObstacles, makeDimensionSprite, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, findRoomPlacementTarget, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
 import { DoorInteraction } from '../three/doorInteraction'
-import { createFurnitureGhost, createFurnitureMesh, updateFurnitureGhost } from '../three/furniture'
+import { createFurnitureGhost, createFurnitureMesh, getFurnitureDimensionLabels, updateFurnitureGhost } from '../three/furniture'
 import { startEyeHeightTransition, stepEyeHeightTransition } from '../three/immersiveCamera'
 import { InteractionSystem, isInteractionKeyPress } from '../three/interaction'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
@@ -152,6 +152,7 @@ export function RoomScene(props: Props) {
     furniture: Map<string, THREE.Group> // itemId → mesh
     ghost: THREE.Group | null
     highlight: THREE.BoxHelper | null
+    dimensions: THREE.Group | null
   } | null>(null)
 
   // ── 初始化场景（只一次）──
@@ -203,6 +204,7 @@ export function RoomScene(props: Props) {
       furniture: new Map<string, THREE.Group>(),
       ghost: null as THREE.Group | null,
       highlight: null as THREE.BoxHelper | null,
+      dimensions: null as THREE.Group | null,
     }
     engineRef.current = eng
     const interactions = interactionSystemRef.current
@@ -785,6 +787,53 @@ export function RoomScene(props: Props) {
       }
     }
   }, [props.selectedId, itemsKey])
+
+  // ── 选中家具尺寸标注（只在切换选中项时创建，拖动/旋转仅同步变换）──
+  useEffect(() => {
+    const eng = engineRef.current
+    if (!eng) return
+    if (eng.dimensions) {
+      eng.dimensions.parent?.remove(eng.dimensions)
+      disposeTree(eng.dimensions)
+      eng.dimensions = null
+    }
+    if (!props.selectedId || props.view.kind === 'layout') return
+    const st = stateRef.current
+    const selectedRoom = st.rooms.find((room) => room.items.some((item) => item.id === props.selectedId))
+    const selectedItem = selectedRoom?.items.find((item) => item.id === props.selectedId)
+    const layer = selectedRoom ? eng.furnitureLayers.get(selectedRoom.id) : null
+    if (!selectedItem || !layer) return
+
+    const dimensions = new THREE.Group()
+    dimensions.name = 'furniture-dimensions'
+    for (const label of getFurnitureDimensionLabels(selectedItem.type)) {
+      const sprite = makeDimensionSprite(label.text, 0.65)
+      sprite.position.set(label.x, 0.025, label.z)
+      dimensions.add(sprite)
+    }
+    dimensions.position.set(selectedItem.x, 0, selectedItem.z)
+    dimensions.rotation.y = selectedItem.rotation
+    layer.add(dimensions)
+    eng.dimensions = dimensions
+    return () => {
+      if (eng.dimensions !== dimensions) return
+      dimensions.parent?.remove(dimensions)
+      disposeTree(dimensions)
+      eng.dimensions = null
+    }
+  }, [props.selectedId, props.view.kind])
+
+  useEffect(() => {
+    const eng = engineRef.current
+    if (!eng?.dimensions || !props.selectedId) return
+    const selectedRoom = props.rooms.find((room) => room.items.some((item) => item.id === props.selectedId))
+    const selectedItem = selectedRoom?.items.find((item) => item.id === props.selectedId)
+    const layer = selectedRoom ? eng.furnitureLayers.get(selectedRoom.id) : null
+    if (!selectedItem || !layer) return
+    if (eng.dimensions.parent !== layer) layer.add(eng.dimensions)
+    eng.dimensions.position.set(selectedItem.x, 0, selectedItem.z)
+    eng.dimensions.rotation.y = selectedItem.rotation
+  }, [props.selectedId, itemsKey, props.rooms])
 
   // ── 放置模式的幽灵预览（挂在当前房间的家具层，位置用局部坐标）──
   useEffect(() => {
