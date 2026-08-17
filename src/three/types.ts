@@ -28,6 +28,8 @@ export type FurnitureType =
   | 'shelf'
   | 'sofa'
   | 'teaTable'
+  | 'workstation2'
+  | 'workstation4'
 
 export interface FurnitureDef {
   type: FurnitureType
@@ -50,6 +52,8 @@ export const FURNITURE_DEFS: Record<FurnitureType, FurnitureDef> = {
   shelf: { type: 'shelf', label: '书柜 0.9×0.3', short: '书柜', w: 0.9, d: 0.3, h: 1.8 },
   sofa: { type: 'sofa', label: '沙发床 1.8×0.62 · ¥268', short: '沙发床', w: 1.8, d: 0.62, h: 0.8, price: 268 },
   teaTable: { type: 'teaTable', label: '茶几 1.0×0.5 · ¥27', short: '茶几', w: 1.0, d: 0.5, h: 0.45, price: 27 },
+  workstation2: { type: 'workstation2', label: '双人位桌 1.2×1.2', short: '双人位桌', w: 1.2, d: 1.2, h: 0.74 },
+  workstation4: { type: 'workstation4', label: '四人位桌 2.4×1.2', short: '四人位桌', w: 2.4, d: 1.2, h: 0.74 },
 }
 
 export const DEFAULT_ROOM: RoomParams = {

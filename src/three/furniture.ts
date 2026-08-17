@@ -6,6 +6,9 @@ const WOOD_DARK = 0x8f6b42
 const LEG = 0x3a3a3e
 const CHAIR_SEAT = 0x5b7a8c
 const SHELF_COLOR = 0xb98d5e
+const OFFICE_FRAME = 0xe4e4df
+const OFFICE_DIVIDER = 0xc7cdca
+const CABLE_HOLE = 0x4c4c50
 
 function mat(color: number, roughness = 0.7): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness })
@@ -35,6 +38,64 @@ function desk(w: number, d: number): THREE.Group {
   top.position.y = 0.735
   g.add(top)
   g.add(legs(w, d, 0.72))
+  return g
+}
+
+/** 带中部隔板和线槽的对坐式办公桌，length 沿 X 轴。 */
+function sharedWorkstation(length: number, seatsPerSide: number): THREE.Group {
+  const g = new THREE.Group()
+  const depth = 1.2
+  const topHeight = 0.74
+  const topThickness = 0.04
+  const frameSize = 0.055
+
+  const top = bx(length, topThickness, depth, 0xd4aa70, 0.58)
+  top.name = 'workstation-top'
+  top.position.y = topHeight - topThickness / 2
+  g.add(top)
+
+  // 两端矩形钢架：立柱 + 底部横梁。
+  for (const sx of [-1, 1]) {
+    const x = sx * (length / 2 - 0.045)
+    for (const sz of [-1, 1]) {
+      const post = bx(frameSize, 0.7, frameSize, OFFICE_FRAME, 0.38)
+      post.position.set(x, 0.35, sz * (depth / 2 - 0.045))
+      g.add(post)
+    }
+    const endRail = bx(frameSize, 0.05, depth - 0.055, OFFICE_FRAME, 0.38)
+    endRail.position.set(x, 0.025, 0)
+    g.add(endRail)
+  }
+
+  // 桌面下的纵向加固梁。
+  for (const sz of [-1, 1]) {
+    const rail = bx(length - 0.08, 0.05, frameSize, OFFICE_FRAME, 0.38)
+    rail.position.set(0, 0.675, sz * (depth / 2 - 0.055))
+    g.add(rail)
+  }
+
+  const divider = bx(length - 0.12, 0.24, 0.025, OFFICE_DIVIDER, 0.48)
+  divider.name = 'workstation-divider'
+  divider.position.set(0, 0.86, 0)
+  g.add(divider)
+
+  const cableTray = bx(length - 0.18, 0.1, 0.18, OFFICE_FRAME, 0.42)
+  cableTray.name = 'workstation-cable-tray'
+  cableTray.position.set(0, 0.625, 0)
+  g.add(cableTray)
+
+  // 每个工位都有一个靠近中央线槽的穿线孔。
+  const stationXs = seatsPerSide === 1 ? [0] : [-length / 4, length / 4]
+  for (const x of stationXs) {
+    for (const z of [-0.23, 0.23]) {
+      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.006, 24), mat(CABLE_HOLE, 0.45))
+      hole.name = 'workstation-cable-hole'
+      hole.position.set(x, topHeight + 0.003, z)
+      hole.castShadow = true
+      g.add(hole)
+    }
+  }
+
   return g
 }
 
@@ -168,10 +229,49 @@ export function createFurnitureMesh(type: FurnitureType): THREE.Group {
     case 'teaTable':
       inner = teaTable()
       break
+    case 'workstation2':
+      inner = sharedWorkstation(1.2, 1)
+      break
+    case 'workstation4':
+      inner = sharedWorkstation(2.4, 2)
+      break
   }
   const g = new THREE.Group()
   g.add(inner)
   g.userData.furniture = true
   g.userData.type = type
   return g
+}
+
+interface GhostMaterial {
+  material: THREE.MeshStandardMaterial
+  color: number
+}
+
+/** 用与正式家具相同的模型构建半透明放置预览。 */
+export function createFurnitureGhost(type: FurnitureType): THREE.Group {
+  const ghost = createFurnitureMesh(type)
+  const materials: GhostMaterial[] = []
+  ghost.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    object.material = (object.material as THREE.Material).clone()
+    const material = object.material as THREE.MeshStandardMaterial
+    material.transparent = true
+    material.opacity = 0.45
+    // 复杂家具由多个半透明网格组成，禁止写深度避免它们互相遮掉。
+    material.depthWrite = false
+    object.castShadow = false
+    object.receiveShadow = false
+    materials.push({ material, color: material.color.getHex() })
+  })
+  ghost.userData.ghostMaterials = materials
+  ghost.visible = false
+  return ghost
+}
+
+/** 更新放置预览的可见性和碰撞状态。 */
+export function updateFurnitureGhost(ghost: THREE.Group, blocked: boolean): void {
+  const materials = (ghost.userData.ghostMaterials ?? []) as GhostMaterial[]
+  for (const entry of materials) entry.material.color.setHex(blocked ? 0xe05555 : entry.color)
+  ghost.visible = true
 }

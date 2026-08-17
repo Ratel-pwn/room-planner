@@ -107,6 +107,16 @@ const PROFILES: Record<FurnitureType, Part[]> = {
     { cx: 0, cz: 0, hx: 0.5, hz: 0.25, y0: 0.415, y1: 0.45 }, // 台面
     ...tableLegs(0.96, 0.46, 0.035, 0.415),
   ],
+  workstation2: [
+    ...deskProfile(1.2, 1.2),
+    { cx: 0, cz: 0, hx: 0.54, hz: 0.0125, y0: 0.74, y1: 0.98 }, // 中部隔板
+    { cx: 0, cz: 0, hx: 0.51, hz: 0.09, y0: 0.575, y1: 0.675 }, // 线槽
+  ],
+  workstation4: [
+    ...deskProfile(2.4, 1.2),
+    { cx: 0, cz: 0, hx: 1.14, hz: 0.0125, y0: 0.74, y1: 0.98 }, // 中部隔板
+    { cx: 0, cz: 0, hx: 1.11, hz: 0.09, y0: 0.575, y1: 0.675 }, // 线槽
+  ],
 }
 
 // ── 2D 旋转矩形（OBB）重叠：分离轴定理 ──

@@ -5,7 +5,7 @@ import { InteractionPrompt } from './hud/InteractionPrompt'
 import { buildRoom, type RoomObstacle } from '../three/buildRoom'
 import { clampToRoom, findCollision, resolveDrag, rotatedRectHalf, walkCollide } from '../three/collision'
 import { DoorInteraction } from '../three/doorInteraction'
-import { createFurnitureMesh } from '../three/furniture'
+import { createFurnitureGhost, createFurnitureMesh, updateFurnitureGhost } from '../three/furniture'
 import { startEyeHeightTransition, stepEyeHeightTransition } from '../three/immersiveCamera'
 import { InteractionSystem, isInteractionKeyPress } from '../three/interaction'
 import { FURNITURE_DEFS, type FurnitureType, type RoomConfig } from '../three/types'
@@ -238,11 +238,6 @@ export function RoomScene(props: Props) {
     const clamp = (type: FurnitureType, rotation: number, x: number, z: number) =>
       clampToRoom(getActiveRoom().params, type, rotation, x, z)
 
-    const tintGhost = (g: THREE.Group, blocked: boolean) => {
-      const mats = (g.userData.mats ?? []) as Array<{ m: THREE.MeshStandardMaterial; c: number }>
-      for (const e of mats) e.m.color.setHex(blocked ? 0xe05555 : e.c)
-    }
-
     const pickFurniture = (): string | null => {
       raycaster.setFromCamera(ndc, camera)
       const roots = [...eng.furniture.values()]
@@ -356,7 +351,6 @@ export function RoomScene(props: Props) {
           const l = toLocal(pt.x, pt.z, ar)
           const c = clamp(st.placingType, 0, l.x, l.z)
           eng.ghost.position.set(c.x, 0, c.z)
-          eng.ghost.visible = true
           // 碰撞时幽灵变红，提示此处不可放置
           const blocked = !!findCollision(
             ar.items,
@@ -364,7 +358,7 @@ export function RoomScene(props: Props) {
             0.02,
             st.obstacles,
           )
-          tintGhost(eng.ghost, blocked)
+          updateFurnitureGhost(eng.ghost, blocked)
         }
       }
       if (dragging) {
@@ -773,7 +767,6 @@ export function RoomScene(props: Props) {
         eng.scene.add(eng.highlight)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.selectedId, itemsKey])
 
   // ── 放置模式的幽灵预览（挂在当前房间的家具层，位置用局部坐标）──
@@ -785,26 +778,12 @@ export function RoomScene(props: Props) {
       eng.ghost = null
     }
     if (props.placingType) {
-      const g = createFurnitureMesh(props.placingType)
-      const mats: Array<{ m: THREE.MeshStandardMaterial; c: number }> = []
-      g.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          o.material = (o.material as THREE.Material).clone()
-          const m = o.material as THREE.MeshStandardMaterial
-          m.transparent = true
-          m.opacity = 0.45
-          o.castShadow = false
-          mats.push({ m, c: m.color.getHex() })
-        }
-      })
-      g.userData.mats = mats
-      g.visible = false
+      const g = createFurnitureGhost(props.placingType)
       eng.ghost = g
       const layer = eng.furnitureLayers.get(props.activeRoomId)
       if (layer) layer.add(g)
       else eng.scene.add(g)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.placingType, props.activeRoomId])
 
   // ── 视角切换 ──

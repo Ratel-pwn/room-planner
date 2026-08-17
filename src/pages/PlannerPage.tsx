@@ -184,6 +184,7 @@ export default function PlannerPage() {
         onOpenChange={setFurnitureSettingsOpen}
         itemCount={planner.items.length}
         clearItems={planner.clearItems}
+        onPick={planner.togglePlacing}
       />
     </div>
   )
