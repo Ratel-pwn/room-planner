@@ -1,4 +1,4 @@
-import * as THREE from 'three'
+import { Group, Object3D, Vector3 } from 'three'
 import type { InteractionTarget, InteractionVector } from './interaction'
 
 const SPRING_STIFFNESS = 54
@@ -10,9 +10,9 @@ export class DoorInteraction implements InteractionTarget {
   readonly minViewDot = 0.72
   readonly id: string
 
-  private readonly leaf: THREE.Object3D
-  private readonly worldPosition = new THREE.Vector3()
-  private readonly pivot: THREE.Group
+  private readonly leaf: Object3D
+  private readonly worldPosition = new Vector3()
+  private readonly pivot: Group
   private readonly openAngle: number
   private progress = 0
   private target = 0
@@ -20,7 +20,7 @@ export class DoorInteraction implements InteractionTarget {
 
   constructor(
     id: string,
-    pivot: THREE.Group,
+    pivot: Group,
     openAngle: number,
   ) {
     this.id = id

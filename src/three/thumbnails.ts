@@ -1,4 +1,13 @@
-import * as THREE from 'three'
+import {
+  AmbientLight,
+  Box3,
+  DirectionalLight,
+  Mesh,
+  OrthographicCamera,
+  Scene,
+  Vector3,
+  WebGLRenderer,
+} from 'three'
 import { createFurnitureMesh } from './furniture'
 import { FURNITURE_DEFS, type FurnitureType } from './types'
 
@@ -17,31 +26,31 @@ const SIZE = 168
 export function getFurnitureThumbnails(): Thumbnails {
   if (cache) return cache
   cache = {}
-  let renderer: THREE.WebGLRenderer | null = null
+  let renderer: WebGLRenderer | null = null
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
+    renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(2)
     renderer.setSize(SIZE, SIZE)
 
-    const scene = new THREE.Scene()
-    scene.add(new THREE.AmbientLight(0xffffff, 0.85))
-    const key = new THREE.DirectionalLight(0xfff2dd, 1.5)
+    const scene = new Scene()
+    scene.add(new AmbientLight(0xffffff, 0.85))
+    const key = new DirectionalLight(0xfff2dd, 1.5)
     key.position.set(2.5, 4, 1.5)
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0xd8e4ff, 0.6)
+    const rim = new DirectionalLight(0xd8e4ff, 0.6)
     rim.position.set(-2, 2, -2.5)
     scene.add(rim)
 
-    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50)
-    const dir = new THREE.Vector3(1, 0.72, 1).normalize()
+    const cam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 50)
+    const dir = new Vector3(1, 0.72, 1).normalize()
 
     for (const type of Object.keys(FURNITURE_DEFS) as FurnitureType[]) {
       const mesh = createFurnitureMesh(type)
       scene.add(mesh)
 
-      const box = new THREE.Box3().setFromObject(mesh)
-      const center = box.getCenter(new THREE.Vector3())
-      const dims = box.getSize(new THREE.Vector3())
+      const box = new Box3().setFromObject(mesh)
+      const center = box.getCenter(new Vector3())
+      const dims = box.getSize(new Vector3())
       const maxDim = Math.max(dims.x, dims.y, dims.z)
       const half = maxDim * 0.74
       cam.left = -half
@@ -57,7 +66,7 @@ export function getFurnitureThumbnails(): Thumbnails {
 
       scene.remove(mesh)
       mesh.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
+        if (o instanceof Mesh) {
           o.geometry.dispose()
           const m = o.material
           if (Array.isArray(m)) m.forEach((x) => x.dispose())

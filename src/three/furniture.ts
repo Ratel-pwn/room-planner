@@ -1,4 +1,4 @@
-import * as THREE from 'three'
+import { BoxGeometry, CylinderGeometry, Group, Material, Mesh, MeshStandardMaterial } from 'three'
 import { FURNITURE_DEFS, type FurnitureType } from './types'
 
 const WOOD = 0xc9a06b
@@ -18,19 +18,19 @@ export function getFurnitureDimensionLabels(type: FurnitureType): Array<{ text: 
   ]
 }
 
-function mat(color: number, roughness = 0.7): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, roughness })
+function mat(color: number, roughness = 0.7): MeshStandardMaterial {
+  return new MeshStandardMaterial({ color, roughness })
 }
 
-function bx(w: number, h: number, d: number, color: number, roughness = 0.7): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color, roughness))
+function bx(w: number, h: number, d: number, color: number, roughness = 0.7): Mesh {
+  const m = new Mesh(new BoxGeometry(w, h, d), mat(color, roughness))
   m.castShadow = true
   m.receiveShadow = true
   return m
 }
 
-function legs(w: number, d: number, h: number, size = 0.045, color = LEG): THREE.Group {
-  const g = new THREE.Group()
+function legs(w: number, d: number, h: number, size = 0.045, color = LEG): Group {
+  const g = new Group()
   for (const sx of [-1, 1])
     for (const sz of [-1, 1]) {
       const leg = bx(size, h, size, color, 0.5)
@@ -40,8 +40,8 @@ function legs(w: number, d: number, h: number, size = 0.045, color = LEG): THREE
   return g
 }
 
-function desk(w: number, d: number): THREE.Group {
-  const g = new THREE.Group()
+function desk(w: number, d: number): Group {
+  const g = new Group()
   const top = bx(w, 0.03, d, WOOD)
   top.position.y = 0.735
   g.add(top)
@@ -50,8 +50,8 @@ function desk(w: number, d: number): THREE.Group {
 }
 
 /** 带中部隔板和线槽的对坐式办公桌，length 沿 X 轴。 */
-function sharedWorkstation(length: number, seatsPerSide: number): THREE.Group {
-  const g = new THREE.Group()
+function sharedWorkstation(length: number, seatsPerSide: number): Group {
+  const g = new Group()
   const depth = 1.2
   const topHeight = 0.74
   const topThickness = 0.04
@@ -96,7 +96,7 @@ function sharedWorkstation(length: number, seatsPerSide: number): THREE.Group {
   const stationXs = seatsPerSide === 1 ? [0] : [-length / 4, length / 4]
   for (const x of stationXs) {
     for (const z of [-0.23, 0.23]) {
-      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.006, 24), mat(CABLE_HOLE, 0.45))
+      const hole = new Mesh(new CylinderGeometry(0.034, 0.034, 0.006, 24), mat(CABLE_HOLE, 0.45))
       hole.name = 'workstation-cable-hole'
       hole.position.set(x, topHeight + 0.003, z)
       hole.castShadow = true
@@ -107,23 +107,23 @@ function sharedWorkstation(length: number, seatsPerSide: number): THREE.Group {
   return g
 }
 
-function roundTable(): THREE.Group {
-  const g = new THREE.Group()
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.03, 40), mat(WOOD))
+function roundTable(): Group {
+  const g = new Group()
+  const top = new Mesh(new CylinderGeometry(0.45, 0.45, 0.03, 40), mat(WOOD))
   top.position.y = 0.735
   top.castShadow = true
   g.add(top)
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.72, 16), mat(LEG, 0.5))
+  const pole = new Mesh(new CylinderGeometry(0.035, 0.035, 0.72, 16), mat(LEG, 0.5))
   pole.position.y = 0.36
   g.add(pole)
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.3, 0.025, 32), mat(LEG, 0.5))
+  const base = new Mesh(new CylinderGeometry(0.28, 0.3, 0.025, 32), mat(LEG, 0.5))
   base.position.y = 0.0125
   g.add(base)
   return g
 }
 
-function chair(): THREE.Group {
-  const g = new THREE.Group()
+function chair(): Group {
+  const g = new Group()
   const seat = bx(0.42, 0.04, 0.42, CHAIR_SEAT)
   seat.position.y = 0.45
   g.add(seat)
@@ -134,8 +134,8 @@ function chair(): THREE.Group {
   return g
 }
 
-function bench(): THREE.Group {
-  const g = new THREE.Group()
+function bench(): Group {
+  const g = new Group()
   const top = bx(1.0, 0.05, 0.35, WOOD_DARK)
   top.position.y = 0.425
   g.add(top)
@@ -143,8 +143,8 @@ function bench(): THREE.Group {
   return g
 }
 
-function shelf(): THREE.Group {
-  const g = new THREE.Group()
+function shelf(): Group {
+  const g = new Group()
   const W = 0.9, D = 0.3, H = 1.8
   for (const sx of [-1, 1]) {
     const side = bx(0.025, H, D, SHELF_COLOR)
@@ -167,8 +167,8 @@ const SOFA_FABRIC = 0x8a9aad
 const SOFA_DARK = 0x6d7d8f
 
 /** 三人位沙发床 1.8×0.62×0.8（面向 +Z） */
-function sofa(): THREE.Group {
-  const g = new THREE.Group()
+function sofa(): Group {
+  const g = new Group()
   const W = 1.8, D = 0.62
   // 座垫（三块）
   for (const i of [-1, 0, 1]) {
@@ -201,8 +201,8 @@ function sofa(): THREE.Group {
 }
 
 /** 简易长方形茶几 1.0×0.5×0.45 */
-function teaTable(): THREE.Group {
-  const g = new THREE.Group()
+function teaTable(): Group {
+  const g = new Group()
   const top = bx(1.0, 0.035, 0.5, 0xd8d2c8, 0.6)
   top.position.y = 0.432
   g.add(top)
@@ -210,8 +210,8 @@ function teaTable(): THREE.Group {
   return g
 }
 
-export function createFurnitureMesh(type: FurnitureType): THREE.Group {
-  let inner: THREE.Group
+export function createFurnitureMesh(type: FurnitureType): Group {
+  let inner: Group
   switch (type) {
     case 'desk120':
       inner = desk(1.2, 0.6)
@@ -244,7 +244,7 @@ export function createFurnitureMesh(type: FurnitureType): THREE.Group {
       inner = sharedWorkstation(2.4, 2)
       break
   }
-  const g = new THREE.Group()
+  const g = new Group()
   g.add(inner)
   g.userData.furniture = true
   g.userData.type = type
@@ -252,18 +252,18 @@ export function createFurnitureMesh(type: FurnitureType): THREE.Group {
 }
 
 interface GhostMaterial {
-  material: THREE.MeshStandardMaterial
+  material: MeshStandardMaterial
   color: number
 }
 
 /** 用与正式家具相同的模型构建半透明放置预览。 */
-export function createFurnitureGhost(type: FurnitureType): THREE.Group {
+export function createFurnitureGhost(type: FurnitureType): Group {
   const ghost = createFurnitureMesh(type)
   const materials: GhostMaterial[] = []
   ghost.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return
-    object.material = (object.material as THREE.Material).clone()
-    const material = object.material as THREE.MeshStandardMaterial
+    if (!(object instanceof Mesh)) return
+    object.material = (object.material as Material).clone()
+    const material = object.material as MeshStandardMaterial
     material.transparent = true
     material.opacity = 0.45
     // 复杂家具由多个半透明网格组成，禁止写深度避免它们互相遮掉。
@@ -278,7 +278,7 @@ export function createFurnitureGhost(type: FurnitureType): THREE.Group {
 }
 
 /** 更新放置预览的可见性和碰撞状态。 */
-export function updateFurnitureGhost(ghost: THREE.Group, blocked: boolean): void {
+export function updateFurnitureGhost(ghost: Group, blocked: boolean): void {
   const materials = (ghost.userData.ghostMaterials ?? []) as GhostMaterial[]
   for (const entry of materials) entry.material.color.setHex(blocked ? 0xe05555 : entry.color)
   ghost.visible = true

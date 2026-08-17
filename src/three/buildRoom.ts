@@ -1,4 +1,18 @@
-import * as THREE from 'three'
+import {
+  BoxGeometry,
+  BufferGeometry,
+  CanvasTexture,
+  Float32BufferAttribute,
+  Group,
+  LineBasicMaterial,
+  LineSegments,
+  Mesh,
+  MeshBasicMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  Sprite,
+  SpriteMaterial,
+} from 'three'
 import { NO_BUMPS, type BumpCorners, type RoomParams } from './types'
 
 const WALL_COLOR = 0xf5f4f0
@@ -13,10 +27,10 @@ function box(
   d: number,
   color: number,
   opts: { roughness?: number; metalness?: number } = {},
-): THREE.Mesh {
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.9, metalness: opts.metalness ?? 0 }),
+): Mesh {
+  const m = new Mesh(
+    new BoxGeometry(w, h, d),
+    new MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.9, metalness: opts.metalness ?? 0 }),
   )
   m.castShadow = false
   m.receiveShadow = true
@@ -33,8 +47,8 @@ function wallWithOpening(
   openingCenter: number, // 洞中心相对墙中心偏移
   thickness: number,
   color: number,
-): THREE.Group {
-  const g = new THREE.Group()
+): Group {
+  const g = new Group()
   const t = thickness
   const oL = openingCenter - openingW / 2 // 洞左缘（相对墙中心）
   const oR = openingCenter + openingW / 2
@@ -72,11 +86,11 @@ function wallWithOpening(
   return g
 }
 
-function baseboard(len: number): THREE.Mesh {
+function baseboard(len: number): Mesh {
   return box(len, 0.08, 0.012, BASEBOARD_COLOR, { roughness: 0.6 })
 }
 
-export function makeDimensionSprite(text: string, scale = 1): THREE.Sprite {
+export function makeDimensionSprite(text: string, scale = 1): Sprite {
   const cv = document.createElement('canvas')
   cv.width = 512
   cv.height = 128
@@ -86,9 +100,9 @@ export function makeDimensionSprite(text: string, scale = 1): THREE.Sprite {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(text, 256, 64)
-  const tex = new THREE.CanvasTexture(cv)
+  const tex = new CanvasTexture(cv)
   tex.anisotropy = 4
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }))
+  const sp = new Sprite(new SpriteMaterial({ map: tex, transparent: true, depthTest: false }))
   sp.scale.set(1.6 * scale, 0.4 * scale, 1)
   sp.renderOrder = 999
   return sp
@@ -102,8 +116,8 @@ const CORNER_SIGNS: Array<[number, number]> = [
   [-1, 1],
 ]
 
-export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.Group {
-  const room = new THREE.Group()
+export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): Group {
+  const room = new Group()
   room.name = 'room'
   const L = p.length
   const W = p.width
@@ -111,9 +125,9 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
   const T = 0.12 // 墙厚
 
   // ── 地板 ──
-  const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(L, 0.05, W),
-    new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, roughness: 0.95 }),
+  const floor = new Mesh(
+    new BoxGeometry(L, 0.05, W),
+    new MeshStandardMaterial({ color: FLOOR_COLOR, roughness: 0.95 }),
   )
   floor.position.y = -0.025
   floor.receiveShadow = true
@@ -125,20 +139,20 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
     const pts: number[] = []
     for (let x = -L / 2; x <= L / 2 + 0.001; x += 0.5) pts.push(x, 0.002, -W / 2, x, 0.002, W / 2)
     for (let z = -W / 2; z <= W / 2 + 0.001; z += 0.5) pts.push(-L / 2, 0.002, z, L / 2, 0.002, z)
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
-    const grid = new THREE.LineSegments(
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new Float32BufferAttribute(pts, 3))
+    const grid = new LineSegments(
       geo,
-      new THREE.LineBasicMaterial({ color: 0xc8c5bd, transparent: true, opacity: 0.5 }),
+      new LineBasicMaterial({ color: 0xc8c5bd, transparent: true, opacity: 0.5 }),
     )
     room.add(grid)
   }
 
   // ── 天花板 ──
   if (p.showCeiling) {
-    const ceil = new THREE.Mesh(
-      new THREE.BoxGeometry(L, 0.05, W),
-      new THREE.MeshStandardMaterial({ color: CEIL_COLOR, roughness: 1 }),
+    const ceil = new Mesh(
+      new BoxGeometry(L, 0.05, W),
+      new MeshStandardMaterial({ color: CEIL_COLOR, roughness: 1 }),
     )
     ceil.position.y = H + 0.025
     room.add(ceil)
@@ -161,7 +175,7 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
   room.add(winWall)
 
   // 窗框（墨绿色铝合金，与照片一致）
-  const frame = new THREE.Group()
+  const frame = new Group()
   const ft = 0.06 // 框料宽
   const fw = p.windowWidth
   const fh = p.windowHeight
@@ -182,9 +196,9 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
     frame.add(m)
   }
   // 玻璃
-  const glass = new THREE.Mesh(
-    new THREE.BoxGeometry(0.02, fh - ft, fw - ft),
-    new THREE.MeshPhysicalMaterial({
+  const glass = new Mesh(
+    new BoxGeometry(0.02, fh - ft, fw - ft),
+    new MeshPhysicalMaterial({
       color: 0x9fb6c4,
       transparent: true,
       opacity: 0.22,
@@ -209,7 +223,7 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
   room.add(doorWall)
   // 门扇（装在铰链枢轴上，沉浸模式的开门动画围绕门轴旋转）
   const leafW = p.doorWidth - 0.06
-  const doorPivot = new THREE.Group()
+  const doorPivot = new Group()
   doorPivot.name = 'doorPivot'
   doorPivot.position.set(doorX + (p.windowEnd === 'negX' ? 0.02 : -0.02), 0, p.doorOffset - leafW / 2)
   const doorLeaf = box(0.04, 2.08, leafW, 0xc9a876, { roughness: 0.7 })
@@ -247,9 +261,9 @@ export function buildRoom(p: RoomParams, bumps: BumpCorners = NO_BUMPS): THREE.G
       const lamp = box(1.2, 0.06, 0.12, 0x222224, { roughness: 0.5 })
       lamp.position.set(lx, H - 0.18, lz)
       room.add(lamp)
-      const glow = new THREE.Mesh(
-        new THREE.BoxGeometry(1.14, 0.015, 0.09),
-        new THREE.MeshBasicMaterial({ color: 0xfff6e0 }),
+      const glow = new Mesh(
+        new BoxGeometry(1.14, 0.015, 0.09),
+        new MeshBasicMaterial({ color: 0xfff6e0 }),
       )
       glow.position.set(lx, H - 0.215, lz)
       room.add(glow)
