@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, Coins, Eye, Gamepad2, LayoutGrid, Map, Plus, Settings } from 'lucide-react'
+import { Building2, ChevronDown, CircleHelp, Coins, Eye, Gamepad2, LayoutGrid, Map, Plus, Settings } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,7 @@ interface Props {
   onSwitchSpace: (id: string) => void
   onAddSpace: () => void
   onViewChange: (kind: ViewCommand['kind']) => void
+  onOpenHelp: () => void
   onOpenSettings: () => void
 }
 
@@ -69,17 +70,22 @@ export function TopBar(p: Props) {
       </div>
 
       {/* 中：视角切换 */}
-      <div className="hud-panel pointer-events-auto flex gap-1 p-1">
-        {VIEW_MODES.map(({ kind, label, icon: Icon, hint }) => (
-          <button
-            key={kind}
-            title={hint}
-            onClick={() => p.onViewChange(kind)}
-            className={cn('hud-btn border-transparent px-3 py-1.5 text-xs shadow-none', p.viewKind === kind && 'hud-btn-active')}
-          >
-            <Icon size={14} /> {label}
-          </button>
-        ))}
+      <div className="pointer-events-auto flex items-start gap-2">
+        <div className="hud-panel flex gap-1 p-1">
+          {VIEW_MODES.map(({ kind, label, icon: Icon, hint }) => (
+            <button
+              key={kind}
+              title={hint}
+              onClick={() => p.onViewChange(kind)}
+              className={cn('hud-btn border-transparent px-3 py-1.5 text-xs shadow-none', p.viewKind === kind && 'hud-btn-active')}
+            >
+              <Icon size={14} /> {label}
+            </button>
+          ))}
+        </div>
+        <button className="hud-btn p-2.5" onClick={p.onOpenHelp} title="操作说明" aria-label="操作说明">
+          <CircleHelp size={16} />
+        </button>
       </div>
 
       {/* 右：经费 + 设置 */}
@@ -90,7 +96,7 @@ export function TopBar(p: Props) {
             ¥{p.placedTotal.toFixed(p.placedTotal % 1 ? 2 : 0)}
           </span>
         </div>
-        <button className="hud-btn p-2.5" onClick={p.onOpenSettings} title="空间设置与操作说明">
+        <button className="hud-btn p-2.5" onClick={p.onOpenSettings} title="空间设置" aria-label="空间设置">
           <Settings size={16} />
         </button>
       </div>

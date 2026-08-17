@@ -6,6 +6,8 @@ import { RoomFloat } from '@/components/hud/RoomFloat'
 import { SelectionFloat } from '@/components/hud/SelectionFloat'
 import { TopBar } from '@/components/hud/TopBar'
 import { NewRoomWindow } from '@/components/settings/NewRoomWindow'
+import { FurnitureSettingsDialog } from '@/components/settings/FurnitureSettingsDialog'
+import { OperationHelpDialog } from '@/components/settings/OperationHelpDialog'
 import { RoomSettingsWindow } from '@/components/settings/RoomSettingsWindow'
 import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { usePlanner } from '@/state/usePlanner'
@@ -16,6 +18,8 @@ const HOTKEY_ORDER = Object.keys(FURNITURE_DEFS) as FurnitureType[]
 export default function PlannerPage() {
   const planner = usePlanner()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [furnitureSettingsOpen, setFurnitureSettingsOpen] = useState(false)
   const [newRoomOpen, setNewRoomOpen] = useState(false)
   // 布局模式下打开设置的房间 id（打开前先切为当前房间）
   const [roomSettingsId, setRoomSettingsId] = useState<string | null>(null)
@@ -30,7 +34,7 @@ export default function PlannerPage() {
   /** 数字键 1-8 快速选择家具（输入框聚焦、弹窗打开或布局模式下不生效） */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen || newRoomOpen || roomSettingsId || isLayout) return
+      if (settingsOpen || helpOpen || furnitureSettingsOpen || newRoomOpen || roomSettingsId || isLayout) return
       const el = e.target as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable))
         return
@@ -39,7 +43,7 @@ export default function PlannerPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, newRoomOpen, roomSettingsId, isLayout, planner])
+  }, [settingsOpen, helpOpen, furnitureSettingsOpen, newRoomOpen, roomSettingsId, isLayout, planner])
 
   // 离开布局模式时关掉布局专属窗口
   useEffect(() => {
@@ -88,6 +92,7 @@ export default function PlannerPage() {
         onSwitchSpace={planner.switchSpace}
         onAddSpace={planner.addSpace}
         onViewChange={planner.setViewKind}
+        onOpenHelp={() => setHelpOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -105,7 +110,14 @@ export default function PlannerPage() {
       )}
 
       {/* 底部建造栏（布局模式下隐藏） */}
-      {!isLayout && <FurnitureBar placingType={placingType} items={planner.items} onPick={planner.togglePlacing} />}
+      {!isLayout && (
+        <FurnitureBar
+          placingType={placingType}
+          items={planner.items}
+          onPick={planner.togglePlacing}
+          onOpenSettings={() => setFurnitureSettingsOpen(true)}
+        />
+      )}
 
       {/* 布局模式：每个房间的浮动工具条 + 新增房间按钮 */}
       {isLayout && (
@@ -143,7 +155,6 @@ export default function PlannerPage() {
             <RoomSettingsWindow
               room={planner.room}
               canDeleteRoom={planner.space.rooms.length > 1}
-              itemCount={planner.items.length}
               onClose={() => setRoomSettingsId(null)}
               patchRoom={planner.patchRoom}
               patchBump={planner.patchBump}
@@ -151,8 +162,6 @@ export default function PlannerPage() {
               rotateRoom={planner.rotateRoom}
               renameRoom={planner.renameRoom}
               deleteRoom={planner.deleteRoom}
-              clearItems={planner.clearItems}
-              applyOfficePreset={planner.applyOfficePreset}
             />
           )}
         </>
@@ -168,6 +177,13 @@ export default function PlannerPage() {
         deleteSpace={planner.deleteSpace}
         eyeHeight={planner.eyeHeight}
         setEyeHeight={planner.setEyeHeight}
+      />
+      <OperationHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <FurnitureSettingsDialog
+        open={furnitureSettingsOpen}
+        onOpenChange={setFurnitureSettingsOpen}
+        itemCount={planner.items.length}
+        clearItems={planner.clearItems}
       />
     </div>
   )

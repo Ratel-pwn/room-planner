@@ -1,6 +1,5 @@
-import { Armchair, DoorOpen, Pencil, RotateCw, Ruler, Trash2 } from 'lucide-react'
+import { DoorOpen, Pencil, RotateCw, Ruler, Trash2 } from 'lucide-react'
 import { FloatWindow } from '@/components/hud/FloatWindow'
-import { BUDGET, SHOPPING_LIST, shoppingTotal } from '@/three/presets'
 import type { CornerBump, RoomConfig, RoomParams } from '@/three/types'
 import { CORNER_LABELS } from '@/state/usePlanner'
 import { NumField, Section } from './fields'
@@ -9,7 +8,6 @@ interface Props {
   /** 被设置的房间（打开前已被设为当前房间） */
   room: RoomConfig
   canDeleteRoom: boolean
-  itemCount: number
   onClose: () => void
   patchRoom: (patch: Partial<RoomParams>) => void
   patchBump: (index: number, patch: Partial<CornerBump>) => void
@@ -17,8 +15,6 @@ interface Props {
   rotateRoom: (id: string, rotation: number) => void
   renameRoom: () => void
   deleteRoom: () => void
-  clearItems: () => void
-  applyOfficePreset: () => void
 }
 
 /** 单个房间的设置窗口（可拖拽浮动窗，从全局设置中独立出来） */
@@ -127,36 +123,6 @@ export function RoomSettingsWindow(p: Props) {
         <NumField label="门偏移" value={room.params.doorOffset} step={0.05} min={-room.params.width / 2 + room.params.doorWidth / 2} max={room.params.width / 2 - room.params.doorWidth / 2} onChange={(v) => p.patchRoom({ doorOffset: v })} />
       </Section>
 
-      <Section title="8 人办公方案（技术团队）">
-        <button className="hud-btn hud-btn-amber w-full" onClick={p.applyOfficePreset}>
-          <Armchair size={14} /> 一键摆入 8 人办公布局
-        </button>
-        <div className="mt-1 grid gap-1.5">
-          {SHOPPING_LIST.map((e) => (
-            <div key={e.key} className="flex items-baseline justify-between gap-2 text-xs text-[#b8b1a0]">
-              <span className="leading-4">
-                {e.name} <span className="text-[#7d7666]">{e.spec} ×{e.qty}</span>
-              </span>
-              <span className="whitespace-nowrap font-medium text-[#ece7da]">
-                ¥{(e.unitPrice * e.qty).toFixed(e.unitPrice % 1 ? 2 : 0)}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-1 flex items-baseline justify-between border-t border-black/50 pt-1.5 text-xs">
-          <span className="text-[#9a917f]">合计（预算 ¥{BUDGET}）</span>
-          <span className={`font-semibold ${shoppingTotal > BUDGET ? 'text-red-400' : 'text-emerald-400'}`}>
-            ¥{shoppingTotal.toFixed(2)}
-            {shoppingTotal > BUDGET && ` · 超 ¥${(shoppingTotal - BUDGET).toFixed(2)}`}
-          </span>
-        </div>
-      </Section>
-
-      <div className="px-4 py-3">
-        <button className="hud-btn hud-btn-danger w-full" onClick={p.clearItems}>
-          <Trash2 size={14} /> 清空家具（{p.itemCount} 件）
-        </button>
-      </div>
     </FloatWindow>
   )
 }

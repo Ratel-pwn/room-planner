@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Hammer } from 'lucide-react'
+import { ChevronDown, ChevronUp, Settings } from 'lucide-react'
 import { FURNITURE_DEFS, type FurnitureItem, type FurnitureType } from '@/three/types'
 import { getFurnitureThumbnails, type Thumbnails } from '@/three/thumbnails'
 import { FurnitureCard } from './FurnitureCard'
+import { getFurnitureBarTransform, toggleFurnitureBar } from './hudControls'
 
 interface Props {
   placingType: FurnitureType | null
   items: FurnitureItem[]
   onPick: (type: FurnitureType) => void
+  onOpenSettings: () => void
 }
 
 /** 屏幕底部的建造工具栏：家具卡片 + 数字快捷键（1-8） */
-export function FurnitureBar({ placingType, items, onPick }: Props) {
+export function FurnitureBar({ placingType, items, onPick, onOpenSettings }: Props) {
   const [thumbs, setThumbs] = useState<Thumbnails>({})
+  const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
     // 首帧后再生成离屏缩略图，避免阻塞 3D 场景初始化
@@ -29,12 +32,30 @@ export function FurnitureBar({ placingType, items, onPick }: Props) {
           放置模式：点击地面摆放「{FURNITURE_DEFS[placingType].short}」 · Esc 取消
         </div>
       )}
-      <div className="hud-panel pointer-events-auto flex items-center gap-2 px-2.5 py-2">
-        <div className="flex flex-col items-center px-1.5">
-          <Hammer size={16} className="text-[#e0a92e]" />
-          <span className="hud-label mt-1">建造</span>
+      <div
+        data-furniture-bar
+        className="hud-panel pointer-events-auto relative flex items-center gap-2 px-2.5 py-2 transition-transform duration-200 ease-out"
+        style={{ transform: getFurnitureBarTransform(collapsed) }}
+      >
+        <button
+          data-furniture-collapse
+          className="hud-btn absolute -top-[18px] left-1/2 -ml-7 h-5 w-14 rounded-b-none rounded-t-[8px] border-b-0 p-0 shadow-none"
+          onClick={() => setCollapsed((value) => toggleFurnitureBar(value))}
+          title={collapsed ? '展开家具栏' : '收起家具栏'}
+          aria-label={collapsed ? '展开家具栏' : '收起家具栏'}
+        >
+          {collapsed ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+        <div className="absolute -top-3 right-2">
+          <button
+            className="hud-btn h-7 w-7 rounded-full p-0"
+            onClick={onOpenSettings}
+            title="家具设置"
+            aria-label="打开家具设置"
+          >
+            <Settings size={14} />
+          </button>
         </div>
-        <div className="h-12 w-0.5 rounded bg-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]" />
         <div className="flex gap-2 overflow-x-auto">
           {defs.map((def, i) => (
             <FurnitureCard
